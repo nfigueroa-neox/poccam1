@@ -1,12 +1,21 @@
 # API — Detector de Cambios para Paneles Industriales
 
-Documentación de la API HTTP del backend. Complementa a `README.md` (uso) y
-`ARQUITECTURA.md` (diseño interno).
+Documentación de la API HTTP **del worker** (el proceso que corre junto a la
+cámara). Complementa a `README.md` (uso) y `ARQUITECTURA.md` (diseño interno).
+
+> **Alcance:** este documento cubre **solo la API del worker**. Los sistemas
+> externos **no** hablan con el worker directamente:
+>
+> | Documento | Qué cubre |
+> |---|---|
+> | **`API.md`** (este) | API local del worker (JSON + video) |
+> | [`CONTRATO_NUBE.md`](CONTRATO_NUBE.md) | Flujo hacia los sistemas externos (nube y Weizhou) |
+> | [`INTEGRACION_WEIZHOU.md`](INTEGRACION_WEIZHOU.md) | Lo que recibe el sistema de Weizhou |
+> | [`concentrador/README.md`](concentrador/README.md) | Panel unificado y agregación |
 
 > ⚠️ **El panel HTML ya no lo sirve el worker.** El único punto de entrada para
 > la interfaz es el panel del **concentrador** (`http://localhost:8080`), que
-> hace proxy hacia el worker activo. El worker expone solo su **API JSON** y el
-> **video**. Ver `concentrador/README.md`.
+> hace proxy hacia el worker activo.
 
 ---
 

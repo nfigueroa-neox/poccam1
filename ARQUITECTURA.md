@@ -3,11 +3,18 @@
 Documento técnico: cómo está construido el proyecto, cómo se comunican el
 frontend y el backend, y cómo se extiende. Para la guía de uso ver `README.md`.
 
+> **Alcance de este documento: el WORKER** (el proceso que corre junto a la
+> cámara). El **concentrador** —que agrega varios workers, sirve el panel web
+> unificado y habla con los sistemas externos (nube y Weizhou)— se documenta en
+> [`concentrador/README.md`](concentrador/README.md) y en
+> [`CONTRATO_NUBE.md`](CONTRATO_NUBE.md).
+
 ## 1. Visión general
 
-**Monolito en un solo proceso Python.** No hay frontend separado: el panel web
-es un HTML+JS embebido en `backend/web.py` que Flask sirve junto con una API
-REST/SSE mínima.
+**Un proceso Python por cámara.** El worker ya **no sirve el panel HTML**: expone
+únicamente su **API JSON** y el **stream de video**. La interfaz la sirve el
+**concentrador**, que hace proxy hacia el worker activo (ver
+`concentrador/backend/panel.py`).
 
 Tres hilos conviven en el proceso:
 
@@ -23,7 +30,8 @@ flowchart LR
 ```
 
 - **Hilo principal**: el bucle `capturar → detectar → registrar`.
-- **Hilo web** (daemon): Flask con el panel y la API.
+- **Hilo web** (daemon): Flask con la **API JSON** (config, ROI, log, IA) y el
+  stream de video. Ya no sirve HTML.
 - **Hilo del capturador MJPEG** (daemon): solo existe con fuentes HTTP MJPEG;
   consume el stream en segundo plano y conserva el frame más reciente.
 
@@ -41,7 +49,7 @@ flowchart LR
 | `backend/config.py` | `Config` (dataclass): carga de `config.yaml`, serialización (`a_dict`/`guardar`) para persistir cambios desde la web |
 | `backend/capturador.py` | Fuentes de imagen: `CapturadorPantalla` (mss), `CapturadorCamara` (OpenCV USB/RTSP con reconexión), `CapturadorMJPEG` (hilo + frame más reciente). Factory `crear_capturador(config)` |
 | `backend/detector.py` | `DetectorCambios`: pipeline por frame (ROI → blur → alinear → diff/ssim/mse → umbral → área → estabilidad). Referencia estable. `actualizar()` para cambios en caliente |
-| `backend/web.py` | Panel web (HTML+JS embebido) + API REST/SSE. Persistencia del ROI (`roi.json`) y notificador SSE de capturas |
+| `backend/web.py` | **API HTTP del worker** (JSON + video). Ya **no** sirve el panel: el HTML vive en `compartido/panel.html` y lo sirve el concentrador. Persiste el ROI (`roi.json`) y expone los SSE que consume el panel |
 | `backend/registrador.py` | `RegistradorEventos`: escribe `eventos.jsonl` (append), guarda imágenes en `capturas_cambio/`, aplica `max_imagenes`, notifica al panel (SSE) |
 
 Dependencias entre módulos:
@@ -112,7 +120,7 @@ canvas (mouse) → POST /api/roi → roi.json → el detector recarga el archivo
 ### Ruta de la UI (sin polling)
 
 ```
-GET /                → HTML+JS embebido (PAGINA)
+GET /                → JSON informativo (servicio, worker_id, dónde está el panel)
 GET /video           → MJPEG en vivo (con ROI dibujado sobre una COPIA del frame)
 GET /api/ultimas     → últimas 2 capturas (bajo demanda al cargar)
 GET /api/log         → eventos + sugerencias de ajuste (bajo demanda)
@@ -123,6 +131,8 @@ GET/POST /api/config
 DELETE /api/log      → limpia eventos.jsonl
 GET /capturas/<nombre> → sirve una imagen (protegido contra rutas fuera de la carpeta)
 ```
+
+> El panel web consume estas rutas **a través del proxy del concentrador**.
 
 ## 5. Contrato de la API
 
@@ -235,15 +245,16 @@ Todos ignorados por git (ver `.gitignore`).
 
 ## 9. Cómo extender
 
-1. **IA bajo demanda**: en `main.py`, dentro del bloque `if hubo_cambio`,
-   llamar al servicio de visión con `resultado["imagen_analizada"]` y guardar
-   el resultado en el JSONL. Ya está previsto en la sección `ia:` del YAML.
+1. **IA bajo demanda**: ~~pendiente~~ **ya implementado**. El `RegistradorEventos`
+   lanza el análisis en un hilo aparte cuando hay cambio y `ia.enabled` está
+   activo (ver `backend/ia.py` y la sección `ia:` del YAML). El esquema de
+   salida lo define el prompt (`worker/ia_prompt.txt`).
 2. **Verificación anti-oculsión** (pendiente de implementar): al confirmar un
    cambio, esperar ~1 s y recapturar; comparar el estado estabilizado contra la
-   referencia anterior para descartar "algo que se cruzó" (el diseño está
-   documentado en el README, sección Camino a producción).
-3. **API externa**: agregar rutas FastAPI/Flask sobre los mismos objetos
-   (consultar eventos, redefinir ROI, ajustar config).
+   referencia anterior para descartar "algo que se cruzó".
+3. **API externa**: ~~pendiente~~ **implementada**. El worker expone su API JSON
+   (`backend/web.py`) y el concentrador la agrega para los sistemas externos
+   (ver `CONTRATO_NUBE.md`).
 4. **Shutter rápido en producción**: la vibración física durante la exposición
    causa desenfoque de movimiento que la alineación **no** puede corregir; se
    mitiga con exposición corta en la cámara y montaje amortiguado.
