@@ -20,6 +20,7 @@ display en particular.
 | **[`API.md`](API.md)** | **Referencia de la API HTTP del worker**: endpoints, campos, ejemplos y SSE |
 | **[`ARQUITECTURA.md`](ARQUITECTURA.md)** | Diseño interno: módulos, hilos, decisiones y deudas técnicas |
 | **[`CONTRATO_NUBE.md`](CONTRATO_NUBE.md)** | **Flujo completo y contrato con los sistemas externos**: nube y Weizhou |
+| **[`INTEGRACION_WEIZHOU.md`](INTEGRACION_WEIZHOU.md)** | Documento para su equipo: qué reciben, cada cuánto y con qué contenido |
 | **[`DESPLIEGUE.md`](DESPLIEGUE.md)** | Puesta en marcha en la nube, problemas conocidos y verificación |
 | **[`concentrador/README.md`](concentrador/README.md)** | El panel unificado y el proxy hacia los workers |
 | **[`backend-nube/README.md`](backend-nube/README.md)** | La API en Vercel: endpoints, tablas y despliegue |
