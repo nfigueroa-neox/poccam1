@@ -545,31 +545,96 @@ de datos donde los datos crecen, se consultan o alimentan dashboards.
 
 ```
 CONFIGURACIÓN (de la nube hacia la cámara)
-  Front nube → Backend nube (guarda, version++) 
+  Front nube → Backend nube (guarda, version++)
              ← Concentrador pregunta (GET config?version=N)
-             ← Concentrador reparte: POST /api/config a cada worker
-             ← Worker aplica en vivo (ya implementado)
+             ← Concentrador reparte: POST /api/externo/config a cada worker
+             ← Worker aplica en vivo
 
-RESULTADOS (de la cámara hacia la nube)
-  Worker detecta cambio → análisis IA → /api/analisis + SSE
+RESULTADOS (de la cámara hacia los sistemas externos)
+  Worker detecta cambio → análisis IA
              → Concentrador recolecta (SSE)
-             → POST /api/concentrador/analisis (con worker_id + esquema + datos)
-             → Backend nube guarda en DB (datos como JSONB)
-             → Front nube muestra según dashboard
+             │
+             ├─▶ Weizhou   POST /api/equipos/estado  (estado EN VIVO)
+             │     Solo transiciones: si la máquina sigue en uso, no reenvía.
+             │     El JSON completo de la IA va en `payload`.
+             │     → tablets de la lavandería se refrescan al instante
+             │
+             └─▶ Vercel    POST /api/concentrador/analisis  (HISTÓRICO)
+                   Todos los análisis, sin excepción.
+                   → Supabase guarda `datos` como JSONB
+                   → dashboards consultan vía GET /api/analisis
+```
+
+### Los dos destinos y por qué son distintos
+
+El concentrador escribe en **dos sistemas con propósitos diferentes**:
+
+| | Weizhou | Nube (Vercel + Supabase) |
+|---|---|---|
+| **Propósito** | Estado en vivo de la máquina | Histórico y estadística |
+| **Frecuencia** | Solo transiciones | Todos los análisis |
+| **Qué envía** | `en_uso` + `payload` con todo el JSON | El sobre genérico completo |
+| **Consumidor** | Tablets de la lavandería | Dashboards de análisis |
+| **Si falla** | Se registra el error (sin reintento) | Se encola y reintenta |
+
+> **Weizhou no recibe históricos**: su API está pensada para reflejar el estado
+> actual de cada máquina. Si mandáramos cada análisis, la bitácora se llenaría
+> de eventos repetidos (su documentación lo advierte explícitamente).
+
+### Trazabilidad de un evento
+
+Cuando la IA detecta un cambio, ese evento queda en tres lugares:
+
+| Lugar | Qué se guarda | Se rota |
+|---|---|---|
+| `worker/eventos.jsonl` | El cambio detectado | ✅ (imágenes) |
+| `worker/analisis_ia/*.json` | El análisis de la IA | ✅ (máx. 10) |
+| **Supabase** | El análisis completo | ❌ **histórico permanente** |
+| `concentrador/estado_weizhou.json` | Último estado enviado por máquina | — |
+
+> Solo la **nube conserva el histórico sin rotación**. Es la fuente para
+> estadística y toma de decisiones.
+
+---
+
+## 8.1 Diagrama del flujo
+
+```mermaid
+flowchart LR
+    C[Camara] --> W[Worker]
+    W -->|cambio detectado| IA[IA: en_uso]
+    IA --> K[Concentrador]
+    K -->|solo transiciones| WZ[Weizhou]
+    K -->|todos| V[Vercel]
+    WZ --> T[Tablets]
+    V --> S[Supabase]
+    S --> D[Dashboard]
 ```
 
 ---
 
-## 9. Decisiones pendientes / a confirmar
+## 9. Decisiones tomadas
 
-| Tema | Opciones | Recomendación |
-|---|---|---|
-| Fuente de verdad de la config | (A) nube manda · (B) local manda | **(A)** nube manda; el front local publica sus cambios |
-| Mecanismo de bajada de config | Polling con `version` · SSE saliente | **Polling + etag** (robusto) y SSE como mejora |
-| Parámetros de máquina por API | Incluir o excluir `camara_fuente`/`web_port` | **Excluir (DECIDIDO)**: la cámara solo se configura desde el front local |
-| Enviar imágenes a la nube | JSON solo · JSON + imagen | JSON primero; imágenes después si hace falta |
-| Multi-esquema por worker | Un esquema fijo · varios | Uno por worker (simple); varios a futuro |
-| Auth | Sin auth · token · token + HTTPS | **Token** (el endpoint está expuesto a internet) |
+| Tema | Decisión |
+|---|---|
+| Fuente de verdad de la config | **La nube manda**; el front local publica sus cambios |
+| Mecanismo de bajada de config | **Polling + version** (robusto) |
+| Parámetros de máquina por API | **Excluidos**: `camara_fuente` solo se ajusta desde el panel local |
+| Enviar imágenes a la nube | **JSON solo** (las imágenes quedan locales) |
+| Multi-esquema por worker | **Uno por worker** |
+| Auth de la API | **Token Bearer** en las rutas del concentrador |
+| **Notificaciones al dashboard** | **Polling** (no hay SSE): el sistema externo consulta. Ver §6.2 |
+| **Weizhou: frecuencia** | **Solo transiciones** de estado, como pide su API |
+| **Weizhou: qué se envía** | `en_uso` como campo nativo; el JSON completo de la IA va en `payload` |
+| **Weizhou: identidad** | Por `maquina_id` (UUID), mapeado desde el `worker_id` local |
+
+### Pendientes de confirmar con el equipo externo
+
+| Tema | Pregunta |
+|---|---|
+| `payload` en Weizhou | ¿Se puede **consultar/filtrar** en su dashboard, o es solo almacenamiento? |
+| Campos enriquecidos | ¿Interesan `etapa`, `temperatura` o `programa` como campos propios? |
+| Estado `mantencion` | ¿Quieren que se envíe (`estado`) cuando la máquina esté en mantención? |
 
 ---
 

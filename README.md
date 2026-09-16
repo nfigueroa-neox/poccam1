@@ -19,7 +19,7 @@ display en particular.
 | **`README.md`** (este) | Qué hace, cómo usarlo, pipeline, parámetros y calibración |
 | **[`API.md`](API.md)** | **Referencia de la API HTTP del worker**: endpoints, campos, ejemplos y SSE |
 | **[`ARQUITECTURA.md`](ARQUITECTURA.md)** | Diseño interno: módulos, hilos, decisiones y deudas técnicas |
-| **[`CONTRATO_NUBE.md`](CONTRATO_NUBE.md)** | **Contrato con el sistema externo**: sobre genérico, endpoints y consumo |
+| **[`CONTRATO_NUBE.md`](CONTRATO_NUBE.md)** | **Flujo completo y contrato con los sistemas externos**: nube y Weizhou |
 | **[`DESPLIEGUE.md`](DESPLIEGUE.md)** | Puesta en marcha en la nube, problemas conocidos y verificación |
 | **[`concentrador/README.md`](concentrador/README.md)** | El panel unificado y el proxy hacia los workers |
 | **[`backend-nube/README.md`](backend-nube/README.md)** | La API en Vercel: endpoints, tablas y despliegue |
@@ -27,6 +27,34 @@ display en particular.
 
 La API de configuración/estado (solo JSON) es consumible desde otro equipo de
 la red y **no expone la imagen de cámara**. Ver `API.md` para el contrato.
+
+## 🔄 Flujo completo
+
+```mermaid
+flowchart LR
+    C[Camara] --> W[Worker]
+    W -->|cambio detectado| IA[IA: en_uso]
+    IA --> K[Concentrador]
+    K -->|solo transiciones| WZ[Weizhou]
+    K -->|todos los analisis| V[Vercel]
+    WZ --> T[Tablets de la lavanderia]
+    V --> S[Supabase]
+    S --> D[Dashboards]
+```
+
+El **concentrador escribe en dos destinos** con propósitos distintos:
+
+| Destino | Propósito | Frecuencia | Si falla |
+|---|---|---|---|
+| **Weizhou** | Estado **en vivo** de la máquina | Solo **transiciones** | Registra el error |
+| **Vercel + Supabase** | **Histórico** y estadística | **Todos** los análisis | Encola y reintenta |
+
+> Solo la nube conserva el histórico **sin rotación**. Los archivos locales del
+> worker (`eventos.jsonl`, `analisis_ia/`) se reciclan.
+
+Detalle completo del flujo en **[`CONTRATO_NUBE.md`](CONTRATO_NUBE.md)** §8.
+La integración con Weizhou está en
+**[`concentrador/README.md`](concentrador/README.md)**.
 
 ## ✨ Qué incluye
 
