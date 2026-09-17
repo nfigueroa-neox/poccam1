@@ -21,6 +21,9 @@ deteccion:
   min_intervalo_eventos: 1.0
   alinear_imagenes: false
   max_desplazamiento: 30.0
+  anti_oclusion: false
+  anti_oclusion_espera: 1.0
+  anti_oclusion_area_max: 0.85
 web:
   enabled: true
   host: 0.0.0.0

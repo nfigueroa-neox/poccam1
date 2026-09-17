@@ -249,6 +249,16 @@ def _aplicar_config(datos: dict, config, detector, monitor=None,
         nuevos["alinear_imagenes"] = _bool(d["alinear_imagenes"])
     if "max_desplazamiento" in d:
         nuevos["max_desplazamiento"] = max(1.0, float(d["max_desplazamiento"]))
+    if "anti_oclusion" in d:
+        nuevos["anti_oclusion"] = _bool(d["anti_oclusion"])
+    if "anti_oclusion_espera" in d:
+        nuevos["anti_oclusion_espera"] = max(
+            0.0, float(d["anti_oclusion_espera"]))
+    if "anti_oclusion_area_max" in d:
+        v = float(d["anti_oclusion_area_max"])
+        if not 0.1 <= v <= 1.0:
+            raise ValueError("anti_oclusion_area_max debe estar entre 0.1 y 1.0")
+        nuevos["anti_oclusion_area_max"] = v
 
     # Aplicar al detector (en caliente) y a la config compartida
     if detector is not None:

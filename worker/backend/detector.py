@@ -33,7 +33,9 @@ class DetectorCambios:
 
     def __init__(self, metodo="diff", umbral=0.02, min_area_px=100,
                  blur_ksize=5, marcar_cambios=False, frames_estables=2,
-                 alinear_imagenes=False, max_desplazamiento=10.0):
+                 alinear_imagenes=False, max_desplazamiento=10.0,
+                 anti_oclusion=False, anti_oclusion_espera=1.0,
+                 anti_oclusion_area_max=0.85):
         self.metodo = metodo
         self.umbral = umbral
         self.min_area_px = min_area_px
@@ -42,6 +44,11 @@ class DetectorCambios:
         self.frames_estables = max(1, frames_estables)
         self.alinear_imagenes = alinear_imagenes
         self.max_desplazamiento = max(1.0, max_desplazamiento)
+        # Verificación anti-oclusión (ver `verificar_oclusion`)
+        self.anti_oclusion = anti_oclusion
+        self.anti_oclusion_espera = max(0.0, float(anti_oclusion_espera))
+        self.anti_oclusion_area_max = min(
+            1.0, max(0.1, float(anti_oclusion_area_max)))
         # Referencia estable: la última imagen confirmada sin cambio
         self.imagen_referencia: np.ndarray | None = None
         # Contador de cambios consecutivos respecto a la referencia
@@ -82,6 +89,14 @@ class DetectorCambios:
         if "max_desplazamiento" in parametros:
             self.max_desplazamiento = max(1.0,
                                           float(parametros["max_desplazamiento"]))
+        if "anti_oclusion" in parametros:
+            self.anti_oclusion = bool(parametros["anti_oclusion"])
+        if "anti_oclusion_espera" in parametros:
+            self.anti_oclusion_espera = max(
+                0.0, float(parametros["anti_oclusion_espera"]))
+        if "anti_oclusion_area_max" in parametros:
+            self.anti_oclusion_area_max = min(
+                1.0, max(0.1, float(parametros["anti_oclusion_area_max"])))
 
     def procesar(self, imagen: np.ndarray):
         """
@@ -327,7 +342,7 @@ class DetectorCambios:
 
         return {"hubo_cambio": hubo, "score": float(score),
                 "area_px": int(area_interior), "area_borde": int(area_borde),
-                "imagen_marcada": visual}
+                "area_total": int(total), "imagen_marcada": visual}
 
     def _ssim(self, anterior, actual, img_color, margen=0):
         """
@@ -389,7 +404,7 @@ class DetectorCambios:
 
         return {"hubo_cambio": hubo, "score": float(1 - score),
                 "area_px": int(area_interior), "area_borde": int(area_borde),
-                "imagen_marcada": visual}
+                "area_total": int(total), "imagen_marcada": visual}
 
     def _mse(self, anterior, actual):
         self.ultimo_area_interior = 0
@@ -397,7 +412,34 @@ class DetectorCambios:
         mse = float(np.mean((anterior.astype(float) - actual.astype(float)) ** 2))
         score = min(mse / 65025.0, 1.0)  # 255² ≈ 65025 → normaliza a 0-1
         return {"hubo_cambio": score > self.umbral, "score": score,
-                "area_px": 0, "area_borde": 0, "imagen_marcada": None}
+                "area_px": 0, "area_borde": 0, "area_total": 0,
+                "imagen_marcada": None}
+
+    # ── Verificación anti-oclusión ────────────────────────────────
+
+    def evaluar_oclusion(self, area_px: int, total: int) -> tuple[bool, str]:
+        """Heurística GRATUITA: ¿el cambio parece una obstrucción?
+
+        Se aplica sobre un evento YA confirmado, **antes** de gastar una
+        llamada a la IA. No usa la imagen de nuevo: solo el área del cambio
+        que el detector ya calculó.
+
+        Criterio: un display cambia en zonas localizadas (unos dígitos, un
+        LED). Si el cambio cubre casi todo el ROI, lo más probable es que
+        algo se haya cruzado frente a la cámara.
+
+        Devuelve `(es_sospechoso, motivo)`.
+        """
+        if not self.anti_oclusion:
+            return False, ""
+        if total <= 0 or area_px <= 0:
+            return False, ""
+
+        ratio = area_px / total
+        if ratio >= self.anti_oclusion_area_max:
+            return True, (f"el cambio cubre {ratio * 100:.0f}% del área "
+                          f"analizada (umbral {self.anti_oclusion_area_max * 100:.0f}%)")
+        return False, ""
 
     def _marcar_cambios(self, visual, mascara):
         """

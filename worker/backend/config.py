@@ -45,6 +45,15 @@ class Config:
     alinear_imagenes: bool = False  # True = compensa vibración de la cámara
     max_desplazamiento: float = 10.0  # máx. desplazamiento a corregir (px)
 
+    # Verificación anti-oclusión: al confirmar un cambio, recaptura tras
+    # `espera_segundos` y descarta el análisis si el resultado parece una
+    # obstrucción (alguien pasó frente a la cámara) en vez de un cambio
+    # real del panel.
+    anti_oclusion: bool = False         # False = no verificar (default)
+    anti_oclusion_espera: float = 1.0   # segundos antes de recapturar
+    anti_oclusion_area_max: float = 0.85  # ratio máx. de cambio en el ROI
+                                          # (por encima = sospechoso)
+
     # Panel web (configuración del área de análisis)
     web_enabled: bool = True
     web_host: str = "0.0.0.0"
@@ -102,6 +111,11 @@ class Config:
         cfg.alinear_imagenes = d.get("alinear_imagenes", cfg.alinear_imagenes)
         cfg.max_desplazamiento = d.get("max_desplazamiento",
                                        cfg.max_desplazamiento)
+        cfg.anti_oclusion = d.get("anti_oclusion", cfg.anti_oclusion)
+        cfg.anti_oclusion_espera = d.get("anti_oclusion_espera",
+                                         cfg.anti_oclusion_espera)
+        cfg.anti_oclusion_area_max = d.get("anti_oclusion_area_max",
+                                           cfg.anti_oclusion_area_max)
 
         r = raw.get("registro", {})
         cfg.log_eventos = r.get("log_eventos", cfg.log_eventos)
@@ -160,6 +174,9 @@ class Config:
                 "min_intervalo_eventos": self.min_intervalo_eventos,
                 "alinear_imagenes": self.alinear_imagenes,
                 "max_desplazamiento": self.max_desplazamiento,
+                "anti_oclusion": self.anti_oclusion,
+                "anti_oclusion_espera": self.anti_oclusion_espera,
+                "anti_oclusion_area_max": self.anti_oclusion_area_max,
             },
             "web": {
                 "enabled": self.web_enabled,

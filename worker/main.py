@@ -53,6 +53,9 @@ class MonitorBackend:
             frames_estables=config.frames_estables,
             alinear_imagenes=config.alinear_imagenes,
             max_desplazamiento=config.max_desplazamiento,
+            anti_oclusion=config.anti_oclusion,
+            anti_oclusion_espera=config.anti_oclusion_espera,
+            anti_oclusion_area_max=config.anti_oclusion_area_max,
         )
         # El análisis IA arranca SIEMPRE DISPONIBLE pero DETENIDO:
         # nunca se auto-activa al iniciar (para no gastar). El botón del
@@ -280,6 +283,7 @@ class MonitorBackend:
                             "score": resultado["score"],
                             "area_px": resultado["area_px"],
                             "area_borde": resultado.get("area_borde", 0),
+                            "area_total": resultado.get("area_total", 0),
                             "metodo": self.config.metodo,
                             "camara": self._nombre_fuente(),
                             "capturas_total": self.conteo_capturas,
