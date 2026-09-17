@@ -44,6 +44,28 @@ GRANT ALL ON SCHEMA public TO service_role;
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 ```
 
+#### 1.1 · Actualizar una base que YA existe
+
+Si la base ya estaba creada y el esquema cambió, **no** hay que reejecutar
+`schema.sql` (usa `CREATE TABLE IF NOT EXISTS`: se saltearía las tablas
+existentes y **no** añadiría las columnas nuevas). Hay que aplicar la migración:
+
+**SQL Editor** → ejecutar `backend-nube/migracion_salud_camaras.sql`.
+
+Es idempotente (se puede correr varias veces). Añade:
+
+| Tabla | Columna | Para qué |
+|---|---|---|
+| `workers` | `camara_salud`, `camara_motivo` | Salud de cada cámara |
+| `heartbeats` | `alertas` | Cámaras con problemas |
+| — | `idx_heartbeats_conc_fecha` | Acelera `GET /api/camaras` |
+
+Incluye los `GRANT` necesarios, así que sirve sola.
+
+> **Síntoma de que falta la migración:** el concentrador loguea
+> `POST /api/concentrador/estado → HTTP 500` con un error de columna
+> inexistente (`column "alertas" does not exist`).
+
 ### Paso 2 — Obtener credenciales
 
 En **Supabase → Settings → API Keys**:
@@ -317,6 +339,8 @@ hay que volver a cargarlas (Paso 3).
 | `404 NOT_FOUND` (deploy de 2-3 s) | Deploy desde la carpeta equivocada | §3.3-A |
 | `302` hacia `vercel.com/sso-api` | Deployment Protection activo | §3.3-B |
 | `deploy.mjs` no encuentra el token | Falta `.vercel-token` | Paso 4 |
+| `column "alertas" does not exist` | Falta la migración | §1.1 |
+| `/api/camaras` devuelve `404` | Backend viejo desplegado | Redesplegar (paso 4) |
 | El concentrador no baja config | `enabled: false` o token no resuelto | Paso 5 |
 | Config llega pero no se aplica | Worker desconocido (revisar `worker_id`) | `config.yaml` del concentrador |
 
