@@ -113,54 +113,16 @@ class RegistradorEventos:
 
     # ── Verificación anti-oclusión ─────────────────────────────────
 
-    def _evaluar_oclusion(self, evento: dict) -> tuple[bool, str]:
-        """¿Este evento parece una obstrucción más que un cambio real?
-
-        Criterio: un display cambia en zonas localizadas (unos dígitos, un
-        LED). Si el cambio cubre casi todo el área analizada, lo más
-        probable es que algo se cruzara frente a la cámara.
-
-        Es una heurística CONSERVADORA: avisa pero no descarta. Con el
-        umbral por defecto (85%) solo se activa en oclusiones evidentes.
-        """
-        if not getattr(self.config, "anti_oclusion", False):
-            return False, ""
-
-        area = int(evento.get("area_px", 0) or 0)
-        total = int(evento.get("area_total", 0) or 0)
-        if area <= 0 or total <= 0:
-            return False, ""
-
-        umbral = float(getattr(self.config, "anti_oclusion_area_max", 0.85))
-        ratio = area / total
-        if ratio >= umbral:
-            return True, (f"el cambio cubre {ratio * 100:.0f}% del área "
-                          f"analizada (umbral {umbral * 100:.0f}%)")
-        return False, ""
-
     # ── Análisis por IA (DeepSeek Vision) ──────────────────────────
 
     def _analizar_si_ia(self, ruta_original: str, evento_id: str, evento: dict):
         """Si la IA está habilitada y hay imagen, la analiza en un hilo
         aparte (no bloquea el bucle del monitor) y guarda el JSON con la
-        misma estructura fija del análisis, además de notificar.
-
-        Si la verificación anti-oclusión está activa, primero comprueba si
-        el cambio parece una obstrucción (alguien pasó frente a la cámara).
-        Un evento sospechoso **no se descarta**: se analiza igual, pero
-        queda marcado en el log y en el análisis para poder filtrarlo.
-        """
+        misma estructura fija del análisis, además de notificar."""
         if not self.config.ia_enabled:
             return
         if not ruta_original:
             return
-
-        # Verificación anti-oclusión (gratuita, no usa la IA)
-        sospechoso, motivo = self._evaluar_oclusion(evento)
-        if sospechoso:
-            logger.warning(
-                f"⚠️ Posible oclusión en {evento_id}: {motivo}. "
-                f"Se analiza igual, pero queda marcado.")
 
         def trabajo():
             from backend.ia import analizar_imagen
@@ -195,7 +157,6 @@ class RegistradorEventos:
                     timespec="milliseconds"),
                 "esquema": self.config.ia_esquema,
                 "datos": resultado,
-                "oclusion_sospechosa": bool(sospechoso),
                 "meta": {
                     "modelo": self.config.ia_model,
                     "detail": self.config.ia_detail,

@@ -182,7 +182,7 @@ una pestaña por worker.
 |---|---|
 | **Video en vivo** | Arrastra el mouse para dibujar el **rectángulo de análisis (ROI)**. Solo lo que está dentro se analiza: el fondo (personas, luces, movimiento) se ignora por completo. Botones 💾 Guardar área / 🗑️ Quitar área |
 | **Indicador de vibración** | Muestra el desplazamiento estimado en vivo: `✅ Sin vibración (dy, dx)` / `⚠️ Vibración detectada` / `🚫 Compensación DESACTIVADA`. Incluye el margen de borde y el desglose interior/borde de la última comparación |
-| **⚙️ Parámetros (en vivo)** | Todos los parámetros de captura y detección. Cada campo se aplica solo al terminar de editarlo (Enter o clic fuera) y **se guarda en `config.yaml`** — sin reiniciar. **Checks**: Marcar cambios, Compensar vibración y **Verificar oclusión**. Select **📷 Preset**: configuración de partida según la resolución de la cámara (VGA, HD, FullHD, 4 MP, 5 MP, 4K) que ajusta `min_area_px`, `blur` y `max_desplazamiento`. Al iniciar, el backend **detecta la resolución del stream** y aplica el preset que le corresponde (lo verás seleccionado en el select, con mensaje). Botones: 💾 Aplicar todo y 🔄 Recargar valores (re-sincroniza con el servidor) |
+| **⚙️ Parámetros (en vivo)** | Todos los parámetros de captura y detección. Cada campo se aplica solo al terminar de editarlo (Enter o clic fuera) y **se guarda en `config.yaml`** — sin reiniciar. **Checks**: Marcar cambios y Compensar vibración. Select **📷 Preset**: configuración de partida según la resolución de la cámara (VGA, HD, FullHD, 4 MP, 5 MP, 4K) que ajusta `min_area_px`, `blur` y `max_desplazamiento`. Al iniciar, el backend **detecta la resolución del stream** y aplica el preset que le corresponde (lo verás seleccionado en el select, con mensaje). Botones: 💾 Aplicar todo y 🔄 Recargar valores (re-sincroniza con el servidor) |
 | **📸 Últimas capturas** | Las 2 imágenes de eventos más recientes con su fecha (se actualizan solo cuando hay una nueva) |
 | **📋 Log de cambios** | Cada evento con su área de píxeles, score y una **sugerencia de ajuste** (p. ej. "sube min_area_px a X"). Botón para limpiar |
 | **🤖 Análisis IA** | Botón para **activar/desactivar** el análisis (con confirmación visual). Muestra la salida del último análisis y un **historial de los últimos 10**. Debajo, el **editor del prompt** con botón de guardado en caliente y una ventana de **prompts almacenados** para reutilizarlos |
@@ -396,10 +396,6 @@ explicando la situación, en vez de inventar una clasificación:
 
 La `confianza` permite que un dashboard muestre una advertencia en esos casos.
 
-> **Relacionado:** la [verificación de oclusión](#verificación-de-oclusión)
-> (activable en el panel) marca los análisis donde el cambio cubre casi todo el
-> área, señal de que algo pasó frente a la cámara.
-
 ## 🎛️ Parámetros (`config.yaml`)
 
 Todos se pueden editar en vivo desde el panel web (se aplican y se guardan solos).
@@ -442,50 +438,8 @@ Todos se pueden editar en vivo desde el panel web (se aplican y se guardan solos
 - La franja del borde que deja el relleno del desplazamiento se **excluye
   automáticamente** de la decisión y se reporta como `area_borde`.
 
-### Verificación de oclusión
-
-| Parámetro | Default | Descripción |
-|---|---|---|
-| `anti_oclusion` | `false` | activa la verificación (**hay un check en el panel**) |
-| `anti_oclusion_espera` | `1.0` | segundos de espera antes de recapturar |
-| `anti_oclusion_area_max` | `0.85` | si el cambio cubre más de esta fracción del área analizada, se marca como posible oclusión |
-
-**Qué problema resuelve:** si alguien pasa frente a la cámara justo cuando hay
-un cambio, la IA analizaría una imagen inútil (y ya pagaste el análisis).
-
-**Cómo funciona — es conservador a propósito:**
-
-```mermaid
-flowchart TD
-    A[Detector confirma un cambio] --> B{¿Oclusión activa?}
-    B -- No --> E[Enviar a la IA normalmente]
-    B -- Sí --> C{¿El cambio cubre más del 85% del area?}
-    C -- No --> E
-    C -- Sí --> D[AVISA en el log y marca el analisis]
-    D --> E
-```
-
-> ⚠️ **No descarta el análisis**: solo lo **marca**. El análisis se hace igual,
-> y el campo `oclusion_sospechosa` queda en el JSON para poder filtrarlo
-> después. Es una decisión conservadora: es mejor gastar un análisis de más
-> que perder una lectura real del panel.
-
-**Cómo ajustarlo:**
-
-| `anti_oclusion_area_max` | Efecto |
-|---|---|
-| `0.85` (default) | Solo marca oclusiones evidentes (casi todo el área) |
-| `0.6` | Más sensible: marca cambios de más de la mitad del área |
-| `0.95` | Casi nunca marca; solo obstrucción total |
-
-**Casos que NO confunde** (importante si el display cambia seguido):
-
-- Un **cronómetro** que avanza cada segundo → el cambio es pequeño, no se marca
-- **Dígitos** que cambian → ocupan poco del área, no se marca
-- Una **persona** que tapa la cámara → cambio casi total, se marca
-
-El criterio es el **área afectada**, no que la imagen "siga cambiando": por eso
-un display que se actualiza continuamente no genera falsos avisos.
+- La franja del borde que deja el relleno del desplazamiento se **excluye
+  automáticamente** de la decisión y se reporta como `area_borde`.
 
 ### Registro
 
@@ -572,8 +526,6 @@ ocupa 2 archivos, así el límite equivale a la mitad de eventos).
 - **API HTTP** del worker + **panel unificado** en el concentrador
 - **Multi-cámara**: un proceso por cámara, unificados en un panel con selector
 - **Integración con los sistemas externos** (nube y Weizhou)
-- **Verificación de oclusión** (opcional, activable en el panel): marca los
-  análisis sospechosos de ser una obstrucción frente a la cámara
 
 ### Pasos siguientes
 
@@ -583,3 +535,7 @@ ocupa 2 archivos, así el límite equivale a la mitad de eventos).
 3. **Ampliar los campos del análisis**: el display ya muestra programa, etapa y
    temperatura; hoy van en texto libre dentro de `notas` y podrían promoverse a
    campos propios para estadística (ver `INTEGRACION_WEIZHOU.md` §6)
+4. **Verificación anti-oclusión** (evaluada y descartada por ahora): el
+   detector ya calcula el área del cambio, así que una heurística que marque
+   los cambios que cubren casi todo el ROI sería barata de añadir si hiciera
+   falta

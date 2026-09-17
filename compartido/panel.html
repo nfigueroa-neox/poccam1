@@ -160,18 +160,11 @@
             <input id="p-max-desp" type="number" step="0.5" min="1"
                    title="Solo aplica si la compensación de vibración está activa">
           </label>
-          <label>Área máx. de oclusión (0.1-1)
-            <input id="p-oclusion-area" type="number" step="0.05" min="0.1" max="1"
-                   title="Si el cambio cubre más de esta fracción del área analizada, se marca como posible oclusión. 0.85 = solo cambios que cubren casi todo.">
-          </label>
         </div>
         <div class="param-checks">
           <label><input id="p-marcar" type="checkbox"
                  title="No aplica con el método mse"> Marcar cambios</label>
           <label><input id="p-alinear" type="checkbox"> Compensar vibración</label>
-          <label><input id="p-oclusion" type="checkbox"
-                 title="Al confirmar un cambio, avisa si el cambio cubre casi todo el área analizada (posible obstrucción frente a la cámara). No descarta el análisis: solo lo marca.">
-            Verificar oclusión</label>
         </div>
         <div class="param-botones">
           <label class="preset-label"
@@ -439,10 +432,6 @@ async function cargarParams() {
     document.getElementById('p-max-desp').value = cfg.deteccion.max_desplazamiento;
     document.getElementById('p-marcar').checked = cfg.deteccion.marcar_cambios;
     document.getElementById('p-alinear').checked = cfg.deteccion.alinear_imagenes;
-    document.getElementById('p-oclusion').checked = !!cfg.deteccion.anti_oclusion;
-    document.getElementById('p-oclusion-area').value =
-      cfg.deteccion.anti_oclusion_area_max !== undefined
-        ? cfg.deteccion.anti_oclusion_area_max : 0.85;
     actualizarHabilitados();
   } catch (e) { /* si falla, dejar los valores por defecto */ }
 }
@@ -454,11 +443,9 @@ function num(id) { return document.getElementById(id).value; }
 function actualizarHabilitados() {
   const esMse = document.getElementById('p-metodo').value === 'mse';
   const alinear = document.getElementById('p-alinear').checked;
-  const oclusion = document.getElementById('p-oclusion').checked;
   document.getElementById('p-min-area').disabled = esMse;
   document.getElementById('p-marcar').disabled = esMse;
   document.getElementById('p-max-desp').disabled = !alinear;
-  document.getElementById('p-oclusion-area').disabled = !oclusion;
   // `umbral` siempre aplica: mse lo usa como corte de score,
   // ssim/diff como sensibilidad a nivel píxel.
 }
@@ -501,13 +488,6 @@ document.getElementById('p-alinear').addEventListener('change', () => {
   actualizarHabilitados();
 });
 
-document.getElementById('p-oclusion').addEventListener('change', () => {
-  const activo = document.getElementById('p-oclusion').checked;
-  aplicar({deteccion: {anti_oclusion: activo}},
-          activo ? '✅ Verificación de oclusión ACTIVADA' : '✅ Verificación de oclusión DESACTIVADA');
-  actualizarHabilitados();
-});
-
 // Cada campo numérico/select se aplica SOLO al terminar de editarlo
 // (evento change = Enter o clic fuera). Así el valor visible siempre
 // coincide con el aplicado, sin depender del botón.
@@ -520,7 +500,6 @@ const CAMPOS = [
   ['p-frames', 'deteccion', 'frames_estables', v => parseInt(v, 10)],
   ['p-intervalo-eventos', 'deteccion', 'min_intervalo_eventos', parseFloat],
   ['p-max-desp', 'deteccion', 'max_desplazamiento', parseFloat],
-  ['p-oclusion-area', 'deteccion', 'anti_oclusion_area_max', parseFloat],
   ['p-worker-id', 'captura', 'worker_id', v => v],
   ['p-esquema', 'ia', 'esquema', v => v],
 ];
@@ -617,8 +596,6 @@ document.getElementById('btn-aplicar').addEventListener('click', async () => {
       max_desplazamiento: parseFloat(num('p-max-desp')),
       marcar_cambios: document.getElementById('p-marcar').checked,
       alinear_imagenes: document.getElementById('p-alinear').checked,
-      anti_oclusion: document.getElementById('p-oclusion').checked,
-      anti_oclusion_area_max: parseFloat(num('p-oclusion-area')),
     },
   };
 

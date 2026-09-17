@@ -53,9 +53,6 @@ class MonitorBackend:
             frames_estables=config.frames_estables,
             alinear_imagenes=config.alinear_imagenes,
             max_desplazamiento=config.max_desplazamiento,
-            anti_oclusion=config.anti_oclusion,
-            anti_oclusion_espera=config.anti_oclusion_espera,
-            anti_oclusion_area_max=config.anti_oclusion_area_max,
         )
         # El análisis IA arranca SIEMPRE DISPONIBLE pero DETENIDO:
         # nunca se auto-activa al iniciar (para no gastar). El botón del

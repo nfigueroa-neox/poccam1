@@ -14,16 +14,13 @@ captura:
 deteccion:
   metodo: ssim
   umbral: 0.5
-  min_area_px: 25
+  min_area_px: 350
   blur_ksize: 9
   marcar_cambios: false
   frames_estables: 2
   min_intervalo_eventos: 1.0
   alinear_imagenes: false
   max_desplazamiento: 30.0
-  anti_oclusion: false
-  anti_oclusion_espera: 1.0
-  anti_oclusion_area_max: 0.85
 web:
   enabled: true
   host: 0.0.0.0
@@ -35,7 +32,7 @@ registro:
   max_imagenes: 20
   nivel: INFO
 ia:
-  enabled: true
+  enabled: false
   model: deepseek-v4-flash-vision-exp
   detail: low
   esquema: estado_equipo_v1
