@@ -284,15 +284,56 @@ El análisis arranca **detenido** en cada arranque (`ia_enabled` se fuerza a
 |---|---|---|---|
 | `GET` | `/api/ia` | — | `{"enabled": bool, "model": "...", "detail": "..."}` |
 | `POST` | `/api/ia` | `{"enabled": true\|false}` | `{"ok": true, "enabled": bool}` |
-| `GET` | `/api/ia/prompt` | — | `{"prompt": "..."}` |
-| `POST` | `/api/ia/prompt` | `{"prompt": "..."}` | `{"ok": true}` |
-| `GET` | `/api/ia/prompts-hist` | — | `{"prompts": ["...", "..."]}` (máx 10) |
-| `POST` | `/api/ia/prompts-hist` | `{"prompt": "..."}` (opcional) | `{"ok": true, "prompts": [...]}` |
-| `POST` | `/api/ia/prompts-hist/delete` | `{"prompt": "..."}` | `{"ok": true, "prompts": [...]}` |
+| `GET` | `/api/ia/prompt` | — 🔒 | `{"prompt": "..."}` |
+| `POST` | `/api/ia/prompt` | `{"prompt": "..."}` 🔒 | `{"ok": true}` |
+| `GET` | `/api/ia/prompts-hist` | — 🔒 | `{"prompts": ["...", "..."]}` (máx 10) |
+| `POST` | `/api/ia/prompts-hist` | `{"prompt": "..."}` (opcional) 🔒 | `{"ok": true, "prompts": [...]}` |
+| `POST` | `/api/ia/prompts-hist/delete` | `{"prompt": "..."}` 🔒 | `{"ok": true, "prompts": [...]}` |
 
 > El **prompt define la estructura del JSON de respuesta**. El backend no
 > impone campos: solo agrega una instrucción neutra para que la IA responda
 > en JSON válido respetando lo pedido.
+
+### 4.1 Protección del prompt (🔒)
+
+El prompt y su historial se pueden **proteger con contraseña**. La contraseña
+vive en `worker/prompt.key` (gitignored, igual que `ia.key`) o en la variable de
+entorno `PROMPT_KEY`.
+
+| Estado | Comportamiento |
+|---|---|
+| **No existe `prompt.key`** (o está vacío) | El prompt queda **libre**: las rutas 🔒 responden normal, sin cabecera |
+| **Existe `prompt.key`** | Las rutas 🔒 exigen la cabecera **`X-Prompt-Key: <contraseña>`**; si falta o no coincide → `401` |
+
+```bash
+# Definir la contraseña
+echo "mi-clave-secreta" > worker/prompt.key
+
+# Sin contraseña (rechazado)
+curl -s http://127.0.0.1:5000/api/ia/prompt
+# → 401 {"ok": false, "error": "no autorizado", "bloqueado": true}
+
+# Con contraseña (ok)
+curl -s -H "X-Prompt-Key: mi-clave-secreta" http://127.0.0.1:5000/api/ia/prompt
+# → 200 {"prompt": "...", "bloqueado": false}
+
+# Guardar el prompt también exige la cabecera
+curl -s -X POST -H "X-Prompt-Key: mi-clave-secreta" \
+  -H "content-type: application/json" \
+  -d '{"prompt": "..."}' http://127.0.0.1:5000/api/ia/prompt
+```
+
+> **Alcance real:** es una barrera de **conveniencia**, no criptográfica. Quien
+tenga acceso a la máquina puede leer `prompt.key`. Su objetivo es evitar que un
+operador en el panel cambie por accidente (o a propósito) el prompt que define
+el comportamiento de la IA.
+>
+> **El panel arranca siempre bloqueado** y **se vuelve a bloquear al guardar**
+o al aplicar un prompt del historial. La contraseña solo vive en memoria de la
+página: al recargar hay que escribirla de nuevo.
+
+> ⚠️ La clave del prompt **no viaja al concentrador ni a la nube**: el contrato
+de configuración no incluye el prompt (ver `CONTRATO_NUBE.md`).
 
 ---
 

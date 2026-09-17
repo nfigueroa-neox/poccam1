@@ -66,7 +66,7 @@ La integración con Weizhou está en
 
 - **Análisis con IA de visión** (opcional, arranca detenido):
   - Se envía la imagen a la IA **solo cuando hay un cambio** (ahorro ~99%)
-  - **Prompt configurable en caliente** desde el panel, con historial de los últimos 10
+  - **Prompt configurable en caliente** desde el panel, con historial de los últimos 10 y **protegido con contraseña**
   - Corre en **hilo aparte** para no bloquear la captura
   - La estructura del JSON de salida la **define el prompt**, no el código
 - **Panel web unificado** (`http://localhost:8080`, en el concentrador) para:
@@ -91,7 +91,7 @@ worker/                ← WORKER: captura, detección, IA (corre junto a la cá
 │   ├── config.py      ← configuración (dataclass + YAML, guardado en vivo)
 │   ├── capturador.py  ← fuente de imágenes: pantalla, cámara USB/IP, MJPEG/RTSP
 │   ├── detector.py    ← pipeline de detección (ROI, vibración, diff, filtros)
-│   ├── ia.py          ← análisis por visión (DeepSeek) + prompt editable
+│   ├── ia.py          ← análisis por visión (DeepSeek) + prompt editable y protegido
 │   ├── web.py         ← API HTTP del worker (JSON + video). Ya NO sirve el panel
 │   └── registrador.py ← log JSONL + guardado de imágenes y análisis
 ├── eventos.jsonl      ← SE GENERA: log de eventos
@@ -185,7 +185,7 @@ una pestaña por worker.
 | **⚙️ Parámetros (en vivo)** | Todos los parámetros de captura y detección. Cada campo se aplica solo al terminar de editarlo (Enter o clic fuera) y **se guarda en `config.yaml`** — sin reiniciar. **Checks**: Marcar cambios y Compensar vibración. Select **📷 Preset**: configuración de partida según la resolución de la cámara (VGA, HD, FullHD, 4 MP, 5 MP, 4K) que ajusta `min_area_px`, `blur` y `max_desplazamiento`. Al iniciar, el backend **detecta la resolución del stream** y aplica el preset que le corresponde (lo verás seleccionado en el select, con mensaje). Botones: 💾 Aplicar todo y 🔄 Recargar valores (re-sincroniza con el servidor) |
 | **📸 Últimas capturas** | Las 2 imágenes de eventos más recientes con su fecha (se actualizan solo cuando hay una nueva) |
 | **📋 Log de cambios** | Cada evento con su área de píxeles, score y una **sugerencia de ajuste** (p. ej. "sube min_area_px a X"). Botón para limpiar |
-| **🤖 Análisis IA** | Botón para **activar/desactivar** el análisis (con confirmación visual). Muestra la salida del último análisis y un **historial de los últimos 10**. Debajo, el **editor del prompt** con botón de guardado en caliente y una ventana de **prompts almacenados** para reutilizarlos |
+| **🤖 Análisis IA** | Botón para **activar/desactivar** el análisis (con confirmación visual). Muestra la salida del último análisis y un **historial de los últimos 10**. Debajo, el **editor del prompt** (protegido con contraseña: arranca 🔒 **bloqueado** y se re-bloquea al guardar) con botón de guardado en caliente y una ventana de **prompts almacenados** para reutilizarlos |
 
 **Parámetros condicionales**: el panel deshabilita (atenúa) los parámetros que
 no aplican en el modo actual — p. ej. `min_area_px` no aplica con el método
@@ -293,6 +293,24 @@ devolver la IA. Solo garantiza que la respuesta sea **JSON válido**; el
 El prompt vive en `worker/ia_prompt.txt` y se edita desde el panel web en
 tiempo real (hay también un historial de los últimos 10 prompts, para
 reutilizar uno anterior).
+
+**El prompt está protegido con contraseña.** La contraseña vive en
+`worker/prompt.key` (gitignored, igual que `ia.key`). El panel arranca
+**bloqueado** siempre: hay que pulsar 🔓 Desbloquear e ingresarla para poder
+ver o editar el prompt y el historial. Al guardar (o al aplicar un prompt del
+historial) **se vuelve a bloquear** automáticamente.
+
+```bash
+# Definir/crear la contraseña (una vez)
+echo "mi-clave-secreta" > worker/prompt.key
+# Quitarla (deja el prompt libre, sin protección)
+del worker\prompt.key      # Windows
+rm worker/prompt.key       # Linux/macOS
+```
+
+Sin `prompt.key` el prompt queda libre (útil en desarrollo). Es una barrera de
+**conveniencia** para que un operador no cambie por accidente el comportamiento
+de la IA, no una protección criptográfica. Ver `API.md` §4.1.
 
 **Ejemplo real de este proyecto** (vigilancia de si una máquina está en uso):
 
@@ -461,7 +479,8 @@ Todos se pueden editar en vivo desde el panel web (se aplican y se guardan solos
 | `esquema` | `estado_equipo_v1` | Nombre del formato de `datos` (lo define el prompt) |
 
 **El prompt NO está aquí**: vive en `worker/ia_prompt.txt` (editable en caliente
-desde el panel, con historial de los últimos 10). Detalle en
+desde el panel, con historial de los últimos 10 y **protegido con contraseña**
+mediante `worker/prompt.key`). Detalle en
 [Análisis con IA](#-análisis-con-ia-de-visión).
 
 > ⚠️ Al guardar parámetros desde la web, `config.yaml` se regenera completo
@@ -522,7 +541,7 @@ ocupa 2 archivos, así el límite equivale a la mitad de eventos).
 
 - **Análisis con IA solo cuando hay cambio** (ahorro ~99%) — ver
   [Análisis con IA](#-análisis-con-ia-de-visión)
-- **Prompt configurable en caliente**, con historial
+- **Prompt configurable en caliente**, con historial y **protección por contraseña**
 - **API HTTP** del worker + **panel unificado** en el concentrador
 - **Multi-cámara**: un proceso por cámara, unificados en un panel con selector
 - **Integración con los sistemas externos** (nube y Weizhou)

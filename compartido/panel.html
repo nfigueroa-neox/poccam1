@@ -196,15 +196,24 @@
              cada cambio detectado.</p>
         </div>
         <div id="ia-prompt-blk">
-          <label class="preset-label" style="font-size:12px">✨ Prompt de la IA</label>
-          <textarea id="ia-prompt" rows="6"
+          <div class="log-encabezado" style="margin-bottom:6px">
+            <label class="preset-label" style="font-size:12px;margin:0">✨ Prompt de la IA</label>
+            <span id="ia-prompt-candado" style="font-size:12px;color:#ffb74d">🔒 Bloqueado</span>
+          </div>
+          <div id="ia-prompt-desbloqueo" style="margin-bottom:6px">
+            <input type="password" id="ia-prompt-pass" placeholder="Contraseña del prompt"
+               style="width:220px; background:#0c1216; color:#b0bec5; border:1px solid #37474f;
+                      border-radius:6px; font-size:12px; padding:5px;">
+            <button class="boton" id="btn-desbloquear-prompt" style="background:#6a1b9a">🔓 Desbloquear</button>
+          </div>
+          <textarea id="ia-prompt" rows="6" readonly
              style="width:100%; box-sizing:border-box; background:#0c1216;
                     color:#b0bec5; border:1px solid #37474f; border-radius:6px;
                     font-family:Consolas,monospace; font-size:12px;
                     padding:6px;"></textarea>
           <div style="margin-top:6px">
-            <button class="boton" id="btn-ia-prompt" style="background:#1565c0">💾 Guardar prompt</button>
-            <button class="boton" id="btn-ia-prompt-guardar" style="background:#00838f">➕ Guardar en historial</button>
+            <button class="boton" id="btn-ia-prompt" style="background:#1565c0" disabled>💾 Guardar prompt</button>
+            <button class="boton" id="btn-ia-prompt-guardar" style="background:#00838f" disabled>➕ Guardar en historial</button>
             <button class="boton" id="btn-prompt-hist" style="background:#455a64">📚 Prompts guardados</button>
             <span id="ia-prompt-estado" style="font-size:12px;color:#aaa;margin-left:8px"></span>
           </div>
@@ -792,27 +801,93 @@ document.getElementById('btn-historial').addEventListener('click', () => {
   btn.textContent = oculto ? '🙈 Ocultar registro' : '📜 Mostrar registro';
 });
 
-// ── Prompt de la IA (editable en tiempo real) ─────────────────────
+// ── Prompt de la IA (protegido con contraseña) ────────────────────
+//
+// La contraseña se guarda SOLO en memoria de la página: al recargar
+// hay que volver a escribirla, y al guardar se vuelve a bloquear.
+let _promptKey = null;
+
+function promptUI() {
+  const ta = document.getElementById('ia-prompt');
+  const btnGuardar = document.getElementById('btn-ia-prompt');
+  const btnHist = document.getElementById('btn-ia-prompt-guardar');
+  const candado = document.getElementById('ia-prompt-candado');
+  const cajaPass = document.getElementById('ia-prompt-desbloqueo');
+  const desbloqueado = !!_promptKey;
+
+  ta.readOnly = !desbloqueado;
+  btnGuardar.disabled = !desbloqueado;
+  btnHist.disabled = !desbloqueado;
+  cajaPass.style.display = desbloqueado ? 'none' : 'block';
+  candado.textContent = desbloqueado ? '🔓 Desbloqueado' : '🔒 Bloqueado';
+  candado.style.color = desbloqueado ? '#81c784' : '#ffb74d';
+}
+
+function bloquearPrompt() {
+  _promptKey = null;
+  document.getElementById('ia-prompt-pass').value = '';
+  document.getElementById('ia-prompt').value = '';
+  promptUI();
+}
+
+function cabecerasPrompt(extra) {
+  return Object.assign({'X-Prompt-Key': _promptKey || ''}, extra || {});
+}
+
+// Carga el prompt desde el servidor (solo funciona desbloqueado)
 async function cargarPromptIA() {
+  if (!_promptKey) return;
   try {
-    const r = await fetch('/api/ia/prompt');
+    const r = await fetch('/api/ia/prompt', {headers: cabecerasPrompt()});
+    if (r.status === 401) { bloquearPrompt(); return; }
     const d = await r.json();
     document.getElementById('ia-prompt').value = d.prompt || '';
   } catch (e) { /* dejar vacío */ }
 }
 
+// Botón desbloquear: valida la contraseña contra el servidor
+document.getElementById('btn-desbloquear-prompt').addEventListener('click', async () => {
+  const pass = document.getElementById('ia-prompt-pass').value;
+  const estadoEl = document.getElementById('ia-prompt-estado');
+  if (!pass.trim()) {
+    estadoEl.textContent = '⚠️ Escribe la contraseña'; estadoEl.style.color = '#ffb74d'; return;
+  }
+  _promptKey = pass;
+  promptUI();
+  try {
+    const r = await fetch('/api/ia/prompt', {headers: cabecerasPrompt()});
+    if (r.status === 401) {
+      bloquearPrompt();
+      estadoEl.textContent = '❌ Contraseña incorrecta'; estadoEl.style.color = '#ff8a80';
+      return;
+    }
+    const d = await r.json();
+    document.getElementById('ia-prompt').value = d.prompt || '';
+    estadoEl.textContent = '🔓 Desbloqueado'; estadoEl.style.color = '#81c784';
+  } catch (e) {
+    bloquearPrompt();
+    estadoEl.textContent = '❌ Error de conexión'; estadoEl.style.color = '#ff8a80';
+  }
+});
+
+document.getElementById('ia-prompt-pass').addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') document.getElementById('btn-desbloquear-prompt').click();
+});
+
+// Guardar prompt → si tiene éxito, se BLOQUEA de nuevo
 document.getElementById('btn-ia-prompt').addEventListener('click', async () => {
   const texto = document.getElementById('ia-prompt').value;
   const estadoEl = document.getElementById('ia-prompt-estado');
   try {
     const r = await fetch('/api/ia/prompt', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: cabecerasPrompt({'Content-Type': 'application/json'}),
       body: JSON.stringify({prompt: texto}),
     });
     const d = await r.json();
     if (d.ok) {
-      estadoEl.textContent = '✅ Guardado'; estadoEl.style.color = '#81c784';
+      bloquearPrompt();
+      estadoEl.textContent = '✅ Guardado (bloqueado de nuevo)'; estadoEl.style.color = '#81c784';
     } else {
       estadoEl.textContent = '❌ ' + (d.error || 'Error'); estadoEl.style.color = '#ff8a80';
     }
@@ -822,17 +897,20 @@ document.getElementById('btn-ia-prompt').addEventListener('click', async () => {
 });
 
 // ── Historial de prompts (guardar / reutilizar) ────────────────────
-// Guardar el prompt ACTUAL al historial (no reemplaza al aplicado)
+// Guardar el prompt ACTUAL al historial (no reemplaza al aplicado).
+// Tras guardar, se bloquea de nuevo.
 document.getElementById('btn-ia-prompt-guardar').addEventListener('click', async () => {
   const texto = document.getElementById('ia-prompt').value;
   const estadoEl = document.getElementById('ia-prompt-estado');
   if (!texto.trim()) { estadoEl.textContent = '⚠️ Prompt vacío'; estadoEl.style.color='#ffb74d'; return; }
   try {
-    await fetch('/api/ia/prompts-hist', {
+    const r = await fetch('/api/ia/prompts-hist', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: cabecerasPrompt({'Content-Type': 'application/json'}),
       body: JSON.stringify({prompt: texto}),
     });
+    if (r.status === 401) { bloquearPrompt(); estadoEl.textContent = '🔒 Bloqueado'; estadoEl.style.color = '#ffb74d'; return; }
+    bloquearPrompt();
     estadoEl.textContent = '✅ Guardado en historial'; estadoEl.style.color = '#81c784';
   } catch (e) { estadoEl.textContent = '❌ Error'; estadoEl.style.color = '#ff8a80'; }
 });
@@ -848,7 +926,13 @@ document.getElementById('btn-cerrar-prompts').addEventListener('click', () => {
 async function refrescarListaPrompts() {
   let lista = [];
   try {
-    const r = await fetch('/api/ia/prompts-hist');
+    const r = await fetch('/api/ia/prompts-hist', {headers: cabecerasPrompt()});
+    const cont0 = document.getElementById('lista-prompts');
+    if (r.status === 401) {
+      cont0.innerHTML = '<p style="color:#ffb74d">🔒 Necesitas desbloquear el prompt ' +
+        'para ver el historial.</p>';
+      return;
+    }
     const d = await r.json();
     lista = d.prompts || [];
   } catch (e) {}
@@ -874,9 +958,15 @@ async function refrescarListaPrompts() {
     const elegido = window._listaPrompts[+b.dataset.usar];
     // Aplicar como prompt actual (guarda en el textarea y en el server)
     document.getElementById('ia-prompt').value = elegido;
-    await fetch('/api/ia/prompt', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt: elegido})});
+    await fetch('/api/ia/prompt', {
+      method:'POST',
+      headers: cabecerasPrompt({'Content-Type':'application/json'}),
+      body: JSON.stringify({prompt: elegido}),
+    });
     document.getElementById('modal-prompts').style.display = 'none';
-    document.getElementById('ia-prompt-estado').textContent = '✅ Prompt aplicado'; document.getElementById('ia-prompt-estado').style.color='#81c784';
+    bloquearPrompt();
+    const es = document.getElementById('ia-prompt-estado');
+    es.textContent = '✅ Prompt aplicado (bloqueado de nuevo)'; es.style.color = '#81c784';
   }));
   cont.querySelectorAll('[data-copiar]').forEach(b => b.addEventListener('click', () => {
     const elegido = window._listaPrompts[+b.dataset.copiar];
@@ -884,7 +974,11 @@ async function refrescarListaPrompts() {
   }));
   cont.querySelectorAll('[data-borrar]').forEach(b => b.addEventListener('click', async () => {
     const elegido = window._listaPrompts[+b.dataset.borrar];
-    await fetch('/api/ia/prompts-hist/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt: elegido})});
+    await fetch('/api/ia/prompts-hist/delete', {
+      method:'POST',
+      headers: cabecerasPrompt({'Content-Type':'application/json'}),
+      body: JSON.stringify({prompt: elegido}),
+    });
     refrescarListaPrompts();
   }));
 }
@@ -896,7 +990,7 @@ cargarParams();
 cargarPresets();
 actualizarEstadoIA();
 actualizarAnalisis();
-cargarPromptIA();
+promptUI();   // arranca BLOQUEADO siempre
 leerRotacion();
 
 // Actualizar SOLO cuando el servidor avisa que hay una captura nueva

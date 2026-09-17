@@ -13,6 +13,7 @@ worker/analisis_ia/
 worker/eventos.jsonl
 worker/roi.json
 worker/ia_prompts_hist.json
+worker/ia_prompt.txt
 
 # ── Datos generados por el CONCENTRADOR ──────────────────
 concentrador/pendientes.jsonl

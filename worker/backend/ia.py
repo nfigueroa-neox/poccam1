@@ -191,6 +191,67 @@ def guarda_prompt(texto: str) -> None:
     ruta.write_text(texto, encoding="utf-8")
 
 
+# ── Bloqueo del prompt con contraseña ──────────────────────────────
+#
+# La contraseña vive en `prompt.key` (gitignored, igual que ia.key).
+# Si NO existe, el prompt queda libre (sin protección). Si existe,
+# las rutas que modifican el prompt o su historial exigen la cabecera
+# `X-Prompt-Key` y devuelven 401 si no coincide.
+
+import hmac as _hmac
+import os as _os
+
+
+class PromptBloqueado(Exception):
+    """Se lanza cuando falta o no coincide la contraseña del prompt."""
+
+
+def _ruta_clave_prompt():
+    from pathlib import Path
+    return Path(__file__).resolve().parent.parent / "prompt.key"
+
+
+def clave_prompt_configurada() -> bool:
+    """True si hay una contraseña definida para proteger el prompt."""
+    ruta = _ruta_clave_prompt()
+    try:
+        return bool(ruta.read_text(encoding="utf-8").strip())
+    except OSError:
+        return False
+
+
+def _clave_guardada() -> str:
+    ruta = _ruta_clave_prompt()
+    if not ruta.exists():
+        return ""
+    # Permite definirla también por variable de entorno
+    env = _os.environ.get("PROMPT_KEY", "").strip()
+    if env:
+        return env
+    try:
+        return ruta.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def verifica_clave_prompt(clave: str | None) -> bool:
+    """True si la clave enviada es válida.
+
+    Si no hay contraseña configurada, siempre autoriza (modo libre).
+    Si la hay, exige coincidencia exacta (comparación en tiempo constante).
+    """
+    guardada = _clave_guardada()
+    if not guardada:
+        return True
+    return _hmac.compare_digest(guardada, (clave or "").strip())
+
+
+def exige_clave_prompt(clave: str | None) -> None:
+    """Lanza PromptBloqueado si la clave no es válida."""
+    if not verifica_clave_prompt(clave):
+        raise PromptBloqueado("Contraseña incorrecta")
+
+
 # ── Historial de prompts del usuario (máx 10) ──────────────────────
 
 HIST_MAX = 10
@@ -202,7 +263,10 @@ def _ruta_hist_prompts():
 
 
 def lista_prompts_hist(limite: int = HIST_MAX) -> list:
-    """Devuelve los prompts guardados, más reciente primero."""
+    """Devuelve los prompts guardados, más reciente primero.
+
+    NOTA: el contenido es sensible (define el comportamiento de la IA),
+    así que la API solo lo expone a quien tenga la contraseña."""
     ruta = _ruta_hist_prompts()
     if not ruta.exists():
         return []

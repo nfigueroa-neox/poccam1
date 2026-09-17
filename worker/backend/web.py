@@ -692,14 +692,29 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
 
     @app.route("/api/ia/prompt")
     def api_ia_prompt_get():
-        """Devuelve el prompt actual del análisis IA."""
-        from backend.ia import lee_prompt_actual
-        return jsonify({"prompt": lee_prompt_actual()})
+        """Devuelve el prompt actual del análisis IA.
+
+        Está PROTEGIDO: si hay contraseña configurada, exige la cabecera
+        `X-Prompt-Key`. Sin contraseña configurada, responde normal.
+        """
+        from backend.ia import lee_prompt_actual, verifica_clave_prompt
+        if not verifica_clave_prompt(request.headers.get("X-Prompt-Key")):
+            return jsonify({"ok": False, "error": "no autorizado",
+                            "bloqueado": True}), 401
+        return jsonify({"prompt": lee_prompt_actual(), "bloqueado": False})
 
     @app.route("/api/ia/prompt", methods=["POST"])
     def api_ia_prompt_post():
-        """Guarda el prompt del análisis IA (se aplica en tiempo real)."""
-        from backend.ia import guarda_prompt
+        """Guarda el prompt del análisis IA (se aplica en tiempo real).
+
+        PROTEGIDO con `X-Prompt-Key` si hay contraseña configurada.
+        """
+        from backend.ia import guarda_prompt, exige_clave_prompt, PromptBloqueado
+        try:
+            exige_clave_prompt(request.headers.get("X-Prompt-Key"))
+        except PromptBloqueado as e:
+            logger.warning("🔒 Intento de guardar prompt sin autorización")
+            return jsonify({"ok": False, "error": str(e), "bloqueado": True}), 401
         datos = request.get_json(silent=True) or {}
         texto = datos.get("prompt", "")
         if not texto.strip():
@@ -710,14 +725,28 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
 
     @app.route("/api/ia/prompts-hist")
     def api_ia_historial():
-        """Lista de prompts guardados (máx 10), más reciente primero."""
-        from backend.ia import lista_prompts_hist
-        return jsonify({"prompts": lista_prompts_hist()})
+        """Lista de prompts guardados (máx 10), más reciente primero.
+
+        PROTEGIDO: contiene el texto íntegro de los prompts.
+        """
+        from backend.ia import lista_prompts_hist, verifica_clave_prompt
+        if not verifica_clave_prompt(request.headers.get("X-Prompt-Key")):
+            return jsonify({"ok": False, "error": "no autorizado",
+                            "bloqueado": True}), 401
+        return jsonify({"prompts": lista_prompts_hist(), "bloqueado": False})
 
     @app.route("/api/ia/prompts-hist", methods=["POST"])
     def api_ia_historial_guardar():
-        """Guarda el prompt actual (o el enviado) en el historial."""
-        from backend.ia import guarda_prompt_historico
+        """Guarda el prompt actual (o el enviado) en el historial.
+
+        PROTEGIDO con `X-Prompt-Key`.
+        """
+        from backend.ia import (guarda_prompt_historico, exige_clave_prompt,
+                                PromptBloqueado)
+        try:
+            exige_clave_prompt(request.headers.get("X-Prompt-Key"))
+        except PromptBloqueado as e:
+            return jsonify({"ok": False, "error": str(e), "bloqueado": True}), 401
         datos = request.get_json(silent=True) or {}
         texto = datos.get("prompt", "").strip()
         if not texto:
@@ -729,8 +758,16 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
 
     @app.route("/api/ia/prompts-hist/delete", methods=["POST"])
     def api_ia_historial_eliminar():
-        """Elimina un prompt del historial por contenido."""
-        from backend.ia import elimina_prompt_historico
+        """Elimina un prompt del historial por contenido.
+
+        PROTEGIDO con `X-Prompt-Key`.
+        """
+        from backend.ia import (elimina_prompt_historico, exige_clave_prompt,
+                                PromptBloqueado)
+        try:
+            exige_clave_prompt(request.headers.get("X-Prompt-Key"))
+        except PromptBloqueado as e:
+            return jsonify({"ok": False, "error": str(e), "bloqueado": True}), 401
         datos = request.get_json(silent=True) or {}
         texto = datos.get("prompt", "")
         lista = elimina_prompt_historico(texto)
