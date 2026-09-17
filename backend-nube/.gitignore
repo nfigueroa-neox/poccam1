@@ -6,4 +6,3 @@ node_modules/
 dist/
 .vercel
 .vercel-token
-deploy.mjs
