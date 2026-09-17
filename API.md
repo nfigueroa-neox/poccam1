@@ -236,6 +236,8 @@ Estado actual **completo** (solo lectura): configuración + runtime.
 |---|---|
 | `camara_viva` | `true` si hay un frame disponible (puede ser viejo) |
 | `camara_congelada` | `true` si la cámara dejó de entregar frames nuevos — hay frame, pero está congelado y no habrá detecciones |
+| `camara_salud` | `ok` \| `congelada` \| `sin_senal` (ver §Salud de la cámara) |
+| `camara_motivo` | Explicación legible del problema (`""` si está bien) |
 | `camara_resolucion` | Resolución real del stream detectada al arrancar |
 | `preset_aplicado` | Preset de parámetros aplicado según la resolución |
 | `rotacion_efectiva` | Rotación en grados que se está aplicando |
@@ -347,6 +349,74 @@ de configuración no incluye el prompt (ver `CONTRATO_NUBE.md`).
 | `GET` | `/api/log` | Últimos eventos + `min_area_px` en vivo + sugerencia de ajuste |
 | `DELETE` | `/api/log` | Vacía `eventos.jsonl` |
 | `GET` | `/api/analisis` | Últimos 10 análisis IA (JSON completo que devolvió el modelo) |
+
+---
+
+## 5.1 Salud de la cámara
+
+Permite saber si la cámara está funcionando **sin** traer toda la
+configuración. Pensado para monitoreo externo y para que el concentrador
+detecte cámaras caídas.
+
+| Método | Ruta | Dónde | Devuelve |
+|---|---|---|---|
+| `GET` | `/api/salud` | Worker | Salud de **esa** cámara |
+| `GET` | `/api/salud-camaras` | Concentrador | Salud de **todas** las cámaras |
+| `GET` | `/api/camaras` | Nube | Salud desde el último heartbeat |
+
+**`GET /api/salud`** (worker):
+
+```json
+{
+  "worker_id": "panel-1",
+  "camara_salud": "congelada",
+  "camara_motivo": "La cámara está conectada pero dejó de entregar frames nuevos: la imagen está congelada y no habrá detecciones",
+  "camara_viva": true,
+  "camara_congelada": true,
+  "fuente": "rtsp://127.0.0.1:8554/stream.rtsp",
+  "capturas": 3223,
+  "cambios": 35,
+  "con_deteccion": false
+}
+```
+
+**`GET /api/salud-camaras`** (concentrador): agrega a todos los workers en una
+sola llamada. Si un worker no responde, se reporta como `worker_caido`
+(no como error de la llamada).
+
+```json
+{
+  "camaras": [
+    {"worker_id": "panel-1", "salud": "congelada", "motivo": "...",
+     "con_deteccion": false, "capturas": 3223, "eventos": 35},
+    {"worker_id": "panel-2", "salud": "ok", "motivo": "",
+     "con_deteccion": true, "capturas": 812, "eventos": 4}
+  ],
+  "alertas": [ /* solo las que NO están ok */ ],
+  "todas_ok": false
+}
+```
+
+**`GET /api/camaras`** (nube): toma el último heartbeat de cada concentrador.
+
+| Query | Devuelve |
+|---|---|
+| *(sin filtro)* | Todas |
+| `?estado=ok` | Solo las que están bien |
+| `?estado=alerta` | Solo las que tienen problemas |
+
+### Valores de `camara_salud` / `salud`
+
+| Valor | Significado | `con_deteccion` |
+|---|---|---|
+| `ok` | Todo bien | `true` |
+| `congelada` | Conectada, pero sin frames nuevos (imagen vieja) | `false` |
+| `sin_senal` | No hay ningún frame disponible | `false` |
+| `worker_caido` | El proceso del worker no responde (solo concentrador/nube) | `false` |
+
+> **Responden `200` siempre**, incluso con la cámara mala: es un informe, no un
+error HTTP. Así un cliente distingue "la cámara está mal" de "la API no
+responde". El veredicto está en el campo `salud`.
 
 ---
 

@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS workers (
     esquema         TEXT,                       -- formato del JSON que produce
     concentrador_id TEXT,                       -- a qué concentrador pertenece
     ultima_vista    TIMESTAMPTZ,                -- último heartbeat recibido
+    -- Salud de la cámara: ok | congelada | sin_senal | worker_caido
+    camara_salud    TEXT,
+    camara_motivo   TEXT,                       -- detalle legible del problema
     creado          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -74,6 +77,7 @@ CREATE TABLE IF NOT EXISTS heartbeats (
     concentrador_id  TEXT,
     timestamp        TIMESTAMPTZ NOT NULL,
     workers          JSONB,          -- estado de cada worker
+    alertas          JSONB DEFAULT '[]'::jsonb,  -- cámaras con problemas
     recibido         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

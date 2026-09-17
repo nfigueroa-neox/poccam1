@@ -797,6 +797,18 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
                         getattr(monitor, "_congelada", False))
             except Exception:  # noqa: BLE001
                 camara_viva = False
+
+        # ── Salud de la cámara, en un solo campo fácil de consumir ──
+        if not camara_viva:
+            salud, motivo = "sin_senal", (
+                "La cámara no responde: no hay ningún frame disponible")
+        elif camara_congelada:
+            salud, motivo = "congelada", (
+                "La cámara está conectada pero dejó de entregar frames "
+                "nuevos: la imagen está congelada y no habrá detecciones")
+        else:
+            salud, motivo = "ok", ""
+
         return jsonify({
             "config": config.a_dict(),
             "runtime": {
@@ -804,6 +816,9 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
                 # True = hay frame, pero la cámara dejó de entregar nuevos
                 # (desconectada): el sistema no detectará nada mientras siga así.
                 "camara_congelada": camara_congelada,
+                # "ok" | "congelada" | "sin_senal"
+                "camara_salud": salud,
+                "camara_motivo": motivo,
                 "camara_resolucion": getattr(config, "camara_resolucion", None),
                 "preset_aplicado": getattr(config, "preset_aplicado", None),
                 "rotacion_efectiva": config.rotacion,
@@ -812,6 +827,56 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
                 "capturas": capturas,
                 "cambios": cambios,
             },
+        })
+
+    @app.route("/api/salud")
+    def api_salud():
+        """
+        Salud de la cámara, sin el resto de la configuración.
+
+        Pensado para monitoreo externo (un chequeo ligero y frecuente) y
+        para que el concentrador sepa si una cámara dejó de funcionar.
+
+        Responde 200 SEMPRE (es un informe, no un error HTTP) para que el
+        cliente distinga "la cámara está mal" de "la API no responde".
+        """
+        camara_viva = False
+        camara_congelada = False
+        capturas = cambios = 0
+        if monitor is not None:
+            capturas = getattr(monitor, "conteo_capturas", 0)
+            cambios = getattr(monitor, "conteo_cambios", 0)
+            try:
+                capturador = getattr(monitor, "capturador", None)
+                if capturador is not None:
+                    capturador.capturar()
+                    camara_viva = True
+                    camara_congelada = bool(
+                        getattr(monitor, "_congelada", False))
+            except Exception:  # noqa: BLE001
+                camara_viva = False
+
+        if not camara_viva:
+            salud, motivo = "sin_senal", (
+                "La cámara no responde: no hay ningún frame disponible")
+        elif camara_congelada:
+            salud, motivo = "congelada", (
+                "La cámara está conectada pero dejó de entregar frames "
+                "nuevos: la imagen está congelada y no habrá detecciones")
+        else:
+            salud, motivo = "ok", ""
+
+        return jsonify({
+            "worker_id": (getattr(config, "worker_id_efectivo", None)
+                          and config.worker_id_efectivo()),
+            "camara_salud": salud,
+            "camara_motivo": motivo,
+            "camara_viva": camara_viva,
+            "camara_congelada": camara_congelada,
+            "fuente": getattr(config, "camara_fuente", None),
+            "capturas": capturas,
+            "cambios": cambios,
+            "con_deteccion": salud == "ok",
         })
 
     @app.route("/api/config-eventos")

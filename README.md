@@ -585,9 +585,67 @@ El estado es consultable en `GET /api/estado-sistema`:
 ```json
 "runtime": {
   "camara_viva": true,
-  "camara_congelada": false
+  "camara_congelada": false,
+  "camara_salud": "ok",
+  "camara_motivo": ""
 }
 ```
 
 > `camara_viva: true` solo significa que **hay** un frame disponible. Si
 > `camara_congelada` es `true`, ese frame es viejo y la cámara está caída.
+
+### Consultar la salud desde la API
+
+Hay un endpoint dedicado, pensado para monitoreo externo:
+
+**`GET /api/salud`** (en cada worker) — informe ligero, sin el resto de la config:
+
+```json
+{
+  "worker_id": "panel-1",
+  "camara_salud": "ok",
+  "camara_motivo": "",
+  "camara_viva": true,
+  "camara_congelada": false,
+  "fuente": "rtsp://...",
+  "capturas": 3223,
+  "cambios": 35,
+  "con_deteccion": true
+}
+```
+
+**`GET /api/salud-camaras`** (en el concentrador) — salud de **todas** las cámaras
+en una sola llamada:
+
+```json
+{
+  "camaras": [
+    {"worker_id": "panel-1", "salud": "congelada",
+     "motivo": "La cámara está conectada pero dejó de entregar frames nuevos",
+     "con_deteccion": false, "capturas": 3223, "eventos": 35}
+  ],
+  "alertas": [ /* solo las que tienen problemas */ ],
+  "todas_ok": false
+}
+```
+
+**`GET /api/camaras`** (en la nube) — lo mismo, desde el último heartbeat:
+
+| Query | Devuelve |
+|---|---|
+| *(sin filtro)* | Todas las cámaras |
+| `?estado=ok` | Solo las que están bien |
+| `?estado=alerta` | Solo las que tienen problemas |
+
+### Valores de salud
+
+| `salud` | Significado | ¿Hay detección? |
+|---|---|---|
+| `ok` | Todo bien | ✅ Sí |
+| `congelada` | Conectada pero sin frames nuevos (imagen vieja) | ❌ No |
+| `sin_senal` | No hay ningún frame disponible | ❌ No |
+| `worker_caido` | El proceso del worker no responde (solo desde el concentrador/nube) | ❌ No |
+
+> Los endpoints **responden `200` siempre** (es un informe, no un error HTTP),
+> para que puedas distinguir "la cámara está mal" de "la API no responde".
+> El veredicto está en `camara_salud` / `salud`.

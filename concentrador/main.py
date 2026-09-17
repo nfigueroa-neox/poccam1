@@ -85,6 +85,11 @@ class Concentrador:
         self.weizhou = self._crear_weizhou()
         # Último resultado del envío a Weizhou, para diagnóstico desde la API
         self.ultimo_weizhou: dict = {}
+        # Cámaras con problemas (salud != "ok"), para consultar desde la API
+        self.alertas_camara: list = []
+        # Último conjunto de alertas avisado en el log (evita repetir el
+        # mismo warning en cada ciclo de reporte).
+        self._alertas_previas: set = set()
 
     # ── Configuración ──────────────────────────────────────────────
 
@@ -227,20 +232,65 @@ class Concentrador:
         if not self.nube_habilitada:
             return
         estado = {}
+        alertas = []
         for wid, worker in self.workers.items():
             est = worker.estado()
             if est is None:
-                estado[wid] = {"camara_viva": False}
+                # El worker no responde: su cámara tampoco sirve
+                estado[wid] = {
+                    "camara_viva": False,
+                    "camara_salud": "worker_caido",
+                    "camara_motivo": "El worker no responde a la API",
+                }
+                alertas.append({
+                    "worker_id": wid,
+                    "salud": "worker_caido",
+                    "motivo": "El worker no responde a la API",
+                })
                 continue
             rt = est.get("runtime", {})
+            salud = rt.get("camara_salud")
+            if salud is None:
+                # Worker de una versión anterior, sin el campo: deducirlo
+                if not rt.get("camara_viva", False):
+                    salud = "sin_senal"
+                elif rt.get("camara_congelada"):
+                    salud = "congelada"
+                else:
+                    salud = "ok"
             estado[wid] = {
                 "camara_viva": rt.get("camara_viva", False),
+                "camara_salud": salud,
+                "camara_motivo": rt.get("camara_motivo", ""),
                 "resolucion": rt.get("camara_resolucion"),
                 "ia_activa": rt.get("ia_activa", False),
                 "capturas": rt.get("capturas", 0),
                 "eventos": rt.get("cambios", 0),
             }
-        self.nube.reportar_estado(estado)
+            if salud != "ok":
+                alertas.append({
+                    "worker_id": wid,
+                    "salud": salud,
+                    "motivo": rt.get("camara_motivo", ""),
+                })
+        # Aviso local: solo cuando el conjunto de cámaras con problemas
+        # CAMBIA, para no repetir el mismo warning en cada ciclo.
+        self.alertas_camara = alertas
+        actuales = {(a["worker_id"], a["salud"]) for a in alertas}
+        if actuales != self._alertas_previas:
+            nuevas = actuales - self._alertas_previas
+            for a in alertas:
+                if (a["worker_id"], a["salud"]) in nuevas:
+                    logger.error("📷⚠️ Cámara con problema [%s] %s: %s",
+                                 a["salud"], a["worker_id"],
+                                 a.get("motivo") or "sin detalle")
+            # "Recuperada" solo si el worker YA NO tiene ningún problema
+            # (pasar de congelada a sin_senal es empeorar, no recuperarse).
+            con_problema = {a["worker_id"] for a in alertas}
+            for wid in {w for w, _ in self._alertas_previas} - con_problema:
+                logger.info("📷✅ Cámara recuperada: %s", wid)
+            self._alertas_previas = actuales
+        self.nube.reportar_estado(estado, alertas=alertas)
 
     # ── Hilos ──────────────────────────────────────────────────────
 

@@ -97,6 +97,10 @@ async function manejar(peticion: Peticion, url: URL): Promise<Response> {
     if (ruta === '/api/eventos' && metodo === 'GET') {
       return await listarEventos(url);
     }
+    // Estado de salud de las cámaras de cada worker, para dashboards
+    if (ruta === '/api/camaras' && metodo === 'GET') {
+      return await listarSaludCamaras(url);
+    }
     if (ruta === '/api/salud' || ruta === '/api/health') {
       return json(200, { ok: true, servicio: 'poccam-backend-nube' });
     }
@@ -193,25 +197,32 @@ async function rutasConcentrador(
   // POST estado → heartbeat con el estado de cada worker
   if (ruta === '/api/concentrador/estado' && metodo === 'POST') {
     const cuerpo = (await req.json()) as Record<string, unknown>;
+    const alertas = Array.isArray(cuerpo.alertas) ? cuerpo.alertas : [];
     const { error } = await db.from('heartbeats').insert({
       concentrador_id: (cuerpo.concentrador_id as string) ?? null,
       timestamp: (cuerpo.timestamp as string) ?? new Date().toISOString(),
       workers: cuerpo.workers ?? {},
+      alertas,
     });
     if (error) return json(500, { error: error.message });
 
-    // Actualizar "ultima_vista" de cada worker reportado
-    for (const workerId of Object.keys(
-      (cuerpo.workers ?? {}) as Record<string, unknown>,
-    )) {
+    // Actualizar "ultima_vista" y la salud de cada worker reportado
+    const workers = (cuerpo.workers ?? {}) as Record<string, any>;
+    for (const workerId of Object.keys(workers)) {
+      const rt = workers[workerId] ?? {};
       await db
         .from('workers')
         .upsert(
-          { worker_id: workerId, ultima_vista: new Date().toISOString() },
+          {
+            worker_id: workerId,
+            ultima_vista: new Date().toISOString(),
+            camara_salud: rt.camara_salud ?? null,
+            camara_motivo: rt.camara_motivo ?? null,
+          },
           { onConflict: 'worker_id' },
         );
     }
-    return json(200, { ok: true });
+    return json(200, { ok: true, alertas: alertas.length });
   }
 
   return json(404, { error: 'ruta de concentrador no encontrada', ruta });
@@ -264,6 +275,70 @@ async function listarWorkers(): Promise<Response> {
     .order('worker_id');
   if (error) return json(500, { error: error.message });
   return json(200, { workers: data ?? [] });
+}
+
+/**
+ * Salud de las cámaras, tomada del ÚLTIMO heartbeat de cada concentrador.
+ *
+ * Sirve para que un dashboard avise "esta cámara dejó de entregar imagen"
+ * sin tener que interpretar el estado worker por worker.
+ *
+ * `GET /api/camaras`            → todas
+ * `GET /api/camaras?estado=ok`  → solo las que están bien
+ * `GET /api/camaras?estado=alerta` → solo las que tienen problemas
+ */
+async function listarSaludCamaras(url: URL): Promise<Response> {
+  const db = supabase();
+  const filtro = url.searchParams.get('estado');
+
+  const { data, error } = await db
+    .from('heartbeats')
+    .select('concentrador_id, timestamp, workers')
+    .order('timestamp', { ascending: false })
+    .limit(50);
+  if (error) return json(500, { error: error.message });
+
+  // Quedarse con el heartbeat MÁS RECIENTE de cada concentrador
+  const ultimoPorConc = new Map<string, any>();
+  for (const fila of data ?? []) {
+    const id = (fila.concentrador_id as string) ?? '(sin id)';
+    if (!ultimoPorConc.has(id)) ultimoPorConc.set(id, fila);
+  }
+
+  const camaras: any[] = [];
+  for (const [concentradorId, fila] of ultimoPorConc) {
+    const workers = (fila.workers ?? {}) as Record<string, any>;
+    for (const [workerId, rt] of Object.entries(workers)) {
+      const salud = rt.camara_salud ?? (rt.camara_viva ? 'ok' : 'sin_senal');
+      camaras.push({
+        concentrador_id: concentradorId,
+        worker_id: workerId,
+        salud,
+        motivo: rt.camara_motivo ?? '',
+        con_deteccion: salud === 'ok',
+        resolucion: rt.resolucion ?? null,
+        ia_activa: rt.ia_activa ?? false,
+        capturas: rt.capturas ?? 0,
+        eventos: rt.eventos ?? 0,
+        visto: fila.timestamp,
+      });
+    }
+  }
+
+  const alertas = camaras.filter((c) => c.salud !== 'ok');
+  const resultado =
+    filtro === 'ok'
+      ? camaras.filter((c) => c.salud === 'ok')
+      : filtro === 'alerta'
+        ? alertas
+        : camaras;
+
+  return json(200, {
+    camaras: resultado,
+    alertas,
+    total: camaras.length,
+    todas_ok: alertas.length === 0,
+  });
 }
 
 async function listarAnalisis(url: URL): Promise<Response> {

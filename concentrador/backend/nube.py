@@ -99,14 +99,20 @@ class ClienteNube:
             self.version_config = version
         return datos
 
-    def reportar_estado(self, workers: dict) -> bool:
-        """Reporta el estado de todos los workers (heartbeat)."""
+    def reportar_estado(self, workers: dict, alertas: list | None = None) -> bool:
+        """Reporta el estado de todos los workers (heartbeat).
+
+        `alertas` lista las cámaras con problemas (`salud != "ok"`), para
+        que el sistema externo pueda avisar sin tener que interpretar el
+        estado de cada worker.
+        """
         from datetime import datetime
         return self._post("/api/concentrador/estado", {
             "concentrador_id": self.concentrador_id,
             "timestamp": datetime.now().astimezone().isoformat(
                 timespec="seconds"),
             "workers": workers,
+            "alertas": alertas or [],
         })
 
     def publicar_config(self, workers: dict) -> bool:

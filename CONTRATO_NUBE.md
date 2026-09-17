@@ -38,6 +38,7 @@ Complementa a `API.md` (contrato del worker) y `ARQUITECTURA.md` (diseño actual
 | `GET` | `/api/workers` | — | Workers conocidos |
 | `GET` | `/api/analisis?worker_id=&limit=` | — | Consulta análisis (máx. 500) |
 | `GET` | `/api/eventos?worker_id=&limit=` | — | Consulta eventos |
+| `GET` | `/api/camaras?estado=ok\|alerta` | — | Salud de las cámaras (último heartbeat) |
 
 > **No hay notificaciones en tiempo real.** El sistema externo debe **consultar**
 > (polling). La API no empuja eventos por SSE ni websockets.
@@ -324,16 +325,44 @@ Authorization: Bearer <token>
   "concentrador_id": "planta-norte",
   "timestamp": "2026-09-10T14:31:00-04:00",
   "workers": {
-    "panel-lavado-1": { "camara_viva": true, "resolucion": [640, 480],
+    "panel-lavado-1": { "camara_viva": true, "camara_salud": "ok",
+                        "camara_motivo": "", "resolucion": [640, 480],
                         "ia_activa": false, "capturas": 1234, "eventos": 12 },
-    "panel-secado-1": { "camara_viva": true, "resolucion": [1920, 1080],
+    "panel-secado-1": { "camara_viva": true, "camara_salud": "congelada",
+                        "camara_motivo": "La cámara está conectada pero dejó de entregar frames nuevos",
+                        "resolucion": [1920, 1080],
                         "ia_activa": true,  "capturas": 980,  "eventos": 7 }
-  }
+  },
+  "alertas": [
+    { "worker_id": "panel-secado-1", "salud": "congelada",
+      "motivo": "La cámara está conectada pero dejó de entregar frames nuevos" }
+  ]
 }
 ```
 
 Permite que el dashboard remoto muestre el estado **aunque el concentrador no
 sea alcanzable** (nunca lo es).
+
+#### Salud de la cámara
+
+`camara_salud` informa si la cámara sirve. El campo `alertas` es un atajo: ya
+viene filtrado con las cámaras que **no** están `ok`, para que el sistema
+externo no tenga que recorrer `workers`.
+
+| `camara_salud` | Significado | ¿Hay detección? |
+|---|---|---|
+| `ok` | Todo bien | ✅ Sí |
+| `congelada` | Conectada pero sin frames nuevos (imagen vieja) | ❌ No |
+| `sin_senal` | No hay ningún frame disponible | ❌ No |
+| `worker_caido` | El proceso del worker no responde | ❌ No |
+
+> `camara_viva: true` **no** garantiza que la cámara funcione: el capturador
+> conserva el último frame válido, así que puede estar congelado. Para saber si
+> realmente hay detección, usar `camara_salud == "ok"`.
+
+Estos valores se persisten en `workers.camara_salud` / `workers.camara_motivo`
+y el heartbeat completo (con `alertas`) en `heartbeats`. Un dashboard puede
+consultarlos con `GET /api/camaras` (ver §5.5).
 
 ### 5.4 (Opcional) Publicar cambios hechos en local
 

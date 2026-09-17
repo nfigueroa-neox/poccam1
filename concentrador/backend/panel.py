@@ -192,6 +192,45 @@ class ProxyPanel:
             logger.info("🔄 Worker activo: %s", nuevo)
             return jsonify({"ok": True, "activo": nuevo})
 
+        @app.route("/api/salud-camaras")
+        def api_salud_camaras():
+            """
+            Salud de TODAS las cámaras del concentrador, en una sola llamada.
+
+            Pensado para monitoreo: permite saber si alguna cámara dejó de
+            entregar imagen sin tener que consultar worker por worker.
+
+            Cada worker se consulta a su vez en su `/api/salud`.
+            """
+            camaras = []
+            for wid, worker in self.workers.items():
+                try:
+                    datos = worker._get("/api/salud", timeout=5)
+                except Exception:  # noqa: BLE001 — se reporta como caído
+                    datos = None
+                if not isinstance(datos, dict):
+                    camaras.append({
+                        "worker_id": wid,
+                        "salud": "worker_caido",
+                        "motivo": "El worker no responde a la API",
+                        "con_deteccion": False,
+                    })
+                    continue
+                camaras.append({
+                    "worker_id": wid,
+                    "salud": datos.get("camara_salud", "desconocido"),
+                    "motivo": datos.get("camara_motivo", ""),
+                    "con_deteccion": bool(datos.get("con_deteccion", False)),
+                    "capturas": datos.get("capturas", 0),
+                    "eventos": datos.get("cambios", 0),
+                })
+            problemas = [c for c in camaras if c["salud"] != "ok"]
+            return jsonify({
+                "camaras": camaras,
+                "alertas": problemas,
+                "todas_ok": not problemas,
+            })
+
         # ── Proxy genérico ─────────────────────────────────────────
         # Atrapa cualquier ruta no definida arriba y la reenvía al worker.
         @app.route("/<path:ruta>", methods=["GET", "POST", "DELETE", "PUT"])
