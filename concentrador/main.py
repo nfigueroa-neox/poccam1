@@ -83,6 +83,8 @@ class Concentrador:
 
         # Weizhou: informa el estado de cada máquina (solo transiciones).
         self.weizhou = self._crear_weizhou()
+        # Último resultado del envío a Weizhou, para diagnóstico desde la API
+        self.ultimo_weizhou: dict = {}
 
     # ── Configuración ──────────────────────────────────────────────
 
@@ -173,7 +175,14 @@ class Concentrador:
         # ── Destino 1: Weizhou (estado de la máquina, en vivo) ─────
         if self.weizhou is not None:
             try:
-                self.weizhou.procesar_analisis(worker_id, analisis)
+                resultado = self.weizhou.procesar_analisis(worker_id, analisis)
+                self.ultimo_weizhou = {
+                    "worker_id": worker_id,
+                    "resultado": resultado,
+                    "enviados": self.weizhou.enviados,
+                    "omitidos": self.weizhou.omitidos,
+                    "ultima_respuesta": self.weizhou.ultima_respuesta,
+                }
             except Exception:  # noqa: BLE001 — no debe tumbar el bucle
                 logger.exception("Error enviando el estado a Weizhou")
 

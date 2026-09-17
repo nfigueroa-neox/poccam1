@@ -7,6 +7,7 @@ y análisis (vía SSE).
 
 import json
 import logging
+import socket
 import threading
 import time
 
@@ -20,7 +21,9 @@ class Worker:
     """Representa un worker remoto (una cámara)."""
 
     def __init__(self, worker_id: str, url: str, token: str = "",
-                 timeout: int = 10):
+                 timeout: int = 45):
+        """`timeout` debe ser MAYOR que el latido del SSE del worker
+        (30 s), o la lectura se corta por carrera constantemente."""
         self.worker_id = worker_id
         self.url = url.rstrip("/")
         self.token = token
@@ -129,6 +132,15 @@ class Worker:
                                 logger.exception(
                                     "Error procesando aviso de %s",
                                     self.worker_id)
+            except (TimeoutError, socket.timeout):
+                # El worker late cada 30 s. Si el timeout de lectura es
+                # igual o menor, se corta siempre por carrera. Se trata
+                # como corte esperado y se reconecta sin ruido en el log.
+                if not detener.is_set():
+                    logger.debug(
+                        "SSE de %s sin latido a tiempo; reconectando",
+                        self.worker_id)
+                    time.sleep(1.0)
             except Exception as e:  # noqa: BLE001 — reconexión
                 if not detener.is_set():
                     logger.warning("SSE de %s cortado: %s. Reintentando…",

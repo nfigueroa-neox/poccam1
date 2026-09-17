@@ -51,6 +51,28 @@ lavado** (arranque y término), no decenas.
 > El último estado enviado por máquina se persiste localmente, así un reinicio
 > de nuestro proceso **no** dispara un envío redundante.
 
+### 2.1 Garantía de entrega ante fallos
+
+El filtro de transiciones tiene un riesgo: si un envío **falla**, y el estado
+vuelve a cambiar y regresa al valor anterior, el sistema podría creer que "no
+cambió" y descartar la transición **para siempre**.
+
+```
+en_uso=true   → ENVIADO ✅
+en_uso=false  → FALLA ❌   (el estado local sigue siendo "en_uso")
+en_uso=true   → "sin cambio" → ❌ NUNCA SE ENVÍA   ← transición perdida
+```
+
+Para evitarlo, cuando un envío falla la máquina queda marcada como **pendiente
+de confirmar**, y el siguiente análisis **reintenta el envío aunque el estado
+parezca igual**. La marca se limpia solo cuando Weizhou confirma con `ok:true`.
+
+Además, una respuesta **`2xx` con `ok:false` se trata como fallo** (no como
+éxito), para no dar por registrado algo que el destino rechazó.
+
+> Ambos casos se ven en el log del concentrador: `Weizhou → HTTP 500`, `Weizhou
+> respondió 2xx pero con error`, `tenía un envío pendiente; reintentando`.
+
 ---
 
 ## 3. Cuerpo de la petición

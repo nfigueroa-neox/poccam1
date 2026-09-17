@@ -67,9 +67,15 @@ class ClienteWeizhou:
             "estado_weizhou.json")
         self._lock = threading.Lock()
         self._estados = self._leer_estados()
+        # Máquinas cuyo último envío FALLÓ: su estado no está confirmado en
+        # Weizhou, así que el próximo análisis debe reintentar aunque el
+        # estado parezca no haber cambiado.
+        self._pendientes: set[str] = set()
         # Estadística de la sesión
         self.enviados = 0
         self.omitidos = 0
+        # Última respuesta cruda del destino (para diagnóstico)
+        self.ultima_respuesta = ""
 
     # ── Persistencia del último estado enviado ─────────────────────
 
@@ -110,10 +116,35 @@ class ClienteWeizhou:
             headers=self._cabeceras(), method="POST")
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                r.read()
-                return 200 <= r.status < 300
+                # La respuesta se guarda y se registra: si el destino
+                # responde 2xx pero con ok:false, no debemos darlo por
+                # enviado (si lo diéramos, el estado quedaría
+                # desincronizado para siempre, porque solo se envían
+                # transiciones).
+                crudo = r.read(2000)
+                estado_http = r.status
+            texto = crudo.decode("utf-8", errors="replace").strip()
+            self.ultima_respuesta = texto[:500]
+            if not (200 <= estado_http < 300):
+                logger.warning("Weizhou → HTTP %s: %s", estado_http, texto)
+                return False
+            # 2xx: puede traer ok:false sin usar un código de error
+            try:
+                cuerpo_resp = json.loads(texto) if texto else {}
+            except json.JSONDecodeError:
+                cuerpo_resp = None
+            if isinstance(cuerpo_resp, dict) and cuerpo_resp.get("ok") is False:
+                logger.error("Weizhou respondió 2xx pero con error: %s", texto)
+                return False
+            logger.debug("Weizhou → HTTP %s | respuesta: %s", estado_http,
+                         texto or "(vacía)")
+            logger.info("✅ Weizhou registró el envío (HTTP %s) | respuesta: %s",
+                        estado_http, texto or "(vacía)")
+            return True
         except urllib.error.HTTPError as e:
-            cuerpo_error = e.read()[:200]
+            cuerpo_error = e.read()[:300]
+            self.ultima_respuesta = cuerpo_error.decode("utf-8",
+                                                        errors="replace")
             # 404 = la máquina no existe en Weizhou: no tiene sentido reintentar
             if e.code in (400, 401, 404):
                 logger.error("Weizhou rechazó el envío (HTTP %s): %s",
@@ -123,6 +154,7 @@ class ClienteWeizhou:
             return False
         except (urllib.error.URLError, OSError) as e:
             logger.warning("Weizhou no responde: %s", e)
+            self.ultima_respuesta = f"(sin respuesta: {e})"
             return False
 
     def enviar_si_cambia(self, maquina: str, en_uso: bool,
@@ -140,11 +172,15 @@ class ClienteWeizhou:
 
         with self._lock:
             anterior = self._estados.get(maquina)
-            if anterior == nuevo:
+            pendiente = maquina in self._pendientes
+            if anterior == nuevo and not pendiente:
                 self.omitidos += 1
-                logger.debug("Weizhou: %s sigue en '%s' (sin envío)",
-                             maquina, nuevo)
+                logger.info("Weizhou: %s sin cambios ('%s'); no se envía",
+                            maquina, nuevo)
                 return "sin_cambio"
+            if pendiente:
+                logger.info("Weizhou: %s tenía un envío pendiente; reintentando",
+                            maquina)
 
         # Identificar la máquina ante Weizhou: por UUID si está mapeada, o
         # por código externo (= worker_id) como alternativa.
@@ -174,10 +210,16 @@ class ClienteWeizhou:
             cuerpo["payload"]["evento_id"] = evento_id
 
         if not self._post(cuerpo):
+            # Marcar como pendiente: si no, un fallo seguido de un cambio
+            # de ida y vuelta haría que el próximo estado "parezca igual"
+            # y se descarte, perdiendo la transición para siempre.
+            with self._lock:
+                self._pendientes.add(maquina)
             return "error"
 
         with self._lock:
             self._estados[maquina] = nuevo
+            self._pendientes.discard(maquina)
             self._guardar_estados()
         self.enviados += 1
         logger.info("🏭 Weizhou: %s → %s%s", maquina, nuevo,
