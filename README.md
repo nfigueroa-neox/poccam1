@@ -2,15 +2,20 @@
 
 Backend que pide imágenes a una cámara a intervalos configurables, compara contra
 una **referencia estable** y, **solo cuando detecta un cambio real**, guarda la
-imagen y registra el evento en un log estructurado.
+imagen, la analiza con una **IA de visión** y registra el evento.
 
 Diseñado para **paneles industriales genéricos** (display de 7 segmentos, LCD,
 matrices, medidores, fondos de cualquier color): no hay nada específico de un
 display en particular.
 
-> 💡 **Por qué existe**: en producción, la idea es enviar la imagen a una IA de
-> visión **solo cuando hay un cambio** (no periódicamente). Esto ahorra ~99% del
-> costo de análisis. Este backend es la "alarma" que decide cuándo disparar.
+> 💡 **Por qué existe**: enviar imágenes a una IA de visión tiene costo por
+> análisis. En vez de mandar imágenes periódicamente, este sistema **solo las
+> envía cuando el detector confirma un cambio real** — un ahorro cercano al
+> **99%**. El detector es la "alarma" que decide cuándo gastar.
+>
+> El **prompt es configurable**, así que el mismo sistema sirve para casos
+distintos (¿está en uso?, leer un display, detectar una alarma...) sin tocar
+> código. Ver [Análisis con IA](#-análisis-con-ia-de-visión).
 
 ## 📚 Documentación
 
@@ -59,6 +64,11 @@ La integración con Weizhou está en
 
 ## ✨ Qué incluye
 
+- **Análisis con IA de visión** (opcional, arranca detenido):
+  - Se envía la imagen a la IA **solo cuando hay un cambio** (ahorro ~99%)
+  - **Prompt configurable en caliente** desde el panel, con historial de los últimos 10
+  - Corre en **hilo aparte** para no bloquear la captura
+  - La estructura del JSON de salida la **define el prompt**, no el código
 - **Panel web unificado** (`http://localhost:8080`, en el concentrador) para:
   - **Elegir la cámara** con un selector (sin abrir una pestaña por worker)
   - Ver el video en vivo y **definir el área de análisis (ROI)** con el mouse
@@ -175,6 +185,7 @@ una pestaña por worker.
 | **⚙️ Parámetros (en vivo)** | Todos los parámetros de captura y detección. Cada campo se aplica solo al terminar de editarlo (Enter o clic fuera) y **se guarda en `config.yaml`** — sin reiniciar. Select **📷 Preset**: configuración de partida según la resolución de la cámara (VGA, HD, FullHD, 4 MP, 5 MP, 4K) que ajusta `min_area_px`, `blur` y `max_desplazamiento`. Al iniciar, el backend **detecta la resolución del stream** y aplica el preset que le corresponde (lo verás seleccionado en el select, con mensaje). Botones: 💾 Aplicar todo y 🔄 Recargar valores (re-sincroniza con el servidor) |
 | **📸 Últimas capturas** | Las 2 imágenes de eventos más recientes con su fecha (se actualizan solo cuando hay una nueva) |
 | **📋 Log de cambios** | Cada evento con su área de píxeles, score y una **sugerencia de ajuste** (p. ej. "sube min_area_px a X"). Botón para limpiar |
+| **🤖 Análisis IA** | Botón para **activar/desactivar** el análisis (con confirmación visual). Muestra la salida del último análisis y un **historial de los últimos 10**. Debajo, el **editor del prompt** con botón de guardado en caliente y una ventana de **prompts almacenados** para reutilizarlos |
 
 **Parámetros condicionales**: el panel deshabilita (atenúa) los parámetros que
 no aplican en el modo actual — p. ej. `min_area_px` no aplica con el método
@@ -228,7 +239,166 @@ Detalle de cada etapa:
 
 **Referencia**: el detector compara contra la **última imagen estable** (no
 contra el frame anterior). Se actualiza cuando no hay cambio y cuando un cambio
-se confirma; **no** se actualiza durante un cambio pendiente de confirmar.
+se confirma; **no** se actualiza durante un cambio pendiente de confirmación.
+
+## 🤖 Análisis con IA de visión
+
+El detector decide **cuándo** algo cambió. La IA decide **qué** cambió.
+
+### El ahorro que justifica el diseño
+
+Enviar imágenes a una IA de visión tiene costo por análisis. Este sistema no
+manda imágenes periódicamente: **solo envía la imagen cuando el detector
+confirma un cambio real**.
+
+```
+Sin este sistema:  1 imagen cada N segundos  →  miles de análisis/día
+Con este sistema:  solo cuando cambia el panel  →  decenas/día
+```
+
+Como el panel de una máquina está quieto la mayor parte del tiempo, el ahorro
+ronda el **99%** del costo de análisis. El detector es la "alarma" que decide
+cuándo vale la pena gastar.
+
+> ⚠️ **La IA es opcional y arranca DETENIDA.** Se activa con un botón del panel
+> (o por API). Nunca se auto-activa, para no gastar sin que alguien lo decida.
+
+### El flujo del análisis
+
+```mermaid
+flowchart TD
+    A[Detector confirma un cambio] --> B[Guarda la imagen del evento]
+    B --> C{¿IA activa?}
+    C -- No --> Z[Fin: solo queda el evento en el log]
+    C -- Sí --> D[Envia la imagen a la IA en un HILO APARTE]
+    D --> E[La IA responde un JSON]
+    E --> F[Guarda el análisis en analisis_ia/]
+    F --> G[Avisa al panel por SSE]
+```
+
+Dos detalles de diseño:
+
+- **El análisis corre en un hilo aparte**: la llamada a la IA tarda segundos y
+  ocurre por internet. Si bloqueara el bucle de captura, se perderían frames y
+  la detección se retrasaría.
+- **Un análisis por evento**: el resultado queda ligado a la imagen que lo
+  originó (`evento_id`), así se puede auditar después.
+
+### El prompt es configurable
+
+**Esto es lo que hace al sistema genérico**: el backend no impone qué debe
+devolver la IA. Solo garantiza que la respuesta sea **JSON válido**; el
+**contenido lo define el prompt**.
+
+El prompt vive en `worker/ia_prompt.txt` y se edita desde el panel web en
+tiempo real (hay también un historial de los últimos 10 prompts, para
+reutilizar uno anterior).
+
+**Ejemplo real de este proyecto** (vigilancia de si una máquina está en uso):
+
+```
+Eres un asistente que analiza UNA imagen de una cámara que vigila el panel
+una máquina industrial (lavadora, secadora, planchadora o dobladora).
+
+Tu tarea es determinar si la máquina está EN USO o LIBRE.
+
+Responde SOLO con un JSON válido, con esta estructura EXACTA:
+{
+  "en_uso": false,
+  "confianza": 0.0,
+  "notas": ""
+}
+```
+
+Y la IA responde:
+
+```json
+{
+  "en_uso": true,
+  "confianza": 0.88,
+  "notas": "Display LCD encendido: programa P01 ESTANDAR, etapa PRELAVADO, ciclo activo"
+}
+```
+
+### Cambiar de caso de uso sin tocar código
+
+Como la estructura la define el prompt, **el mismo sistema sirve para otros
+casos** cambiando solo el texto:
+
+| Caso de uso | Qué pedirle a la IA |
+|---|---|
+| ¿La máquina está en uso? | `{"en_uso": bool, "confianza": float}` |
+| Leer un valor de un display | `{"valor": "083", "unidad": "C"}` |
+| ¿Hay una persona frente al panel? | `{"hay_persona": bool}` |
+| ¿La máquina muestra una alarma? | `{"alarma": bool, "codigo": ""}` |
+
+No hay que cambiar el backend, ni la base de datos, ni el transporte: el JSON
+libre viaja en el campo `datos` y se guarda como **JSONB** (ver
+`CONTRATO_NUBE.md`).
+
+### Dónde queda el resultado
+
+| Lugar | Qué guarda |
+|---|---|
+| `worker/analisis_ia/*.json` | El análisis local (se mantienen los últimos 10) |
+| **Supabase** | **Histórico permanente** (no se rota) |
+| El panel web | Bloque "Análisis IA" + historial de los últimos 10 |
+
+El archivo local tiene este formato (el "sobre genérico"):
+
+```json
+{
+  "tipo": "analisis_ia",
+  "worker_id": "panel-1",
+  "evento_id": "20260916_123040_025",
+  "timestamp": "2026-09-16T12:30:40.025-03:00",
+  "esquema": "estado_equipo_v1",
+  "datos": { "en_uso": true, "confianza": 0.88, "notas": "..." },
+  "meta": {
+    "modelo": "deepseek-v4-flash-vision-exp",
+    "area_px": 559,
+    "score": 0.0221
+  }
+}
+```
+
+**`datos`** es el JSON que devolvió la IA (libre). **`meta`** son los metadatos
+del sistema (qué modelo, cuánto área cambió, con qué score). El campo
+**`esquema`** es un nombre que declara qué estructura tiene `datos`, para que
+los dashboards externos sepan cómo interpretarlo.
+
+### Modelo y configuración
+
+| Parámetro | Default | Descripción |
+|---|---|---|
+| `enabled` | `false` | Arranca detenido; se activa desde el panel |
+| `model` | `deepseek-v4-flash-vision-exp` | Modelo de visión |
+| `detail` | `low` | `low` escala la imagen (más rápido y barato); `high` mantiene resolución |
+| `esquema` | `estado_equipo_v1` | Nombre del formato de `datos` |
+
+**La API key no se guarda en `config.yaml`** (ese archivo se versiona). Se lee
+de la variable de entorno `DEEPSEEK_API_KEY` o del archivo `worker/ia.key`
+(ignorado por git).
+
+### Cuándo la IA no puede determinar el estado
+
+Si la imagen no es utilizable (cámara tapada, alguien se cruzó, mal
+alumbrado), el prompt pide responder con **confianza baja** y una nota
+explicando la situación, en vez de inventar una clasificación:
+
+```json
+{
+  "en_uso": false,
+  "confianza": 0.0,
+  "notas": "No se distingue el panel: la imagen está tapada por una persona"
+}
+```
+
+La `confianza` permite que un dashboard muestre una advertencia en esos casos.
+
+> **Mejora pendiente:** cuando el detector confirma un cambio, convendría
+esperar ~1 s y recapturar para descartar que el cambio haya sido causado por
+algo que pasó por delante (ver *Camino a producción*).
 
 ## 🎛️ Parámetros (`config.yaml`)
 
@@ -281,6 +451,19 @@ Todos se pueden editar en vivo desde el panel web (se aplican y se guardan solos
 | `output_dir` | `capturas_cambio` | carpeta de imágenes |
 | `max_imagenes` | `20` | máximo de archivos en la carpeta (0 = sin límite) |
 | `nivel` | `INFO` | `DEBUG` para ver todas las comparaciones |
+
+### Análisis con IA
+
+| Parámetro | Default | Descripción |
+|---|---|---|
+| `enabled` | `false` | Arranca **detenido**; se activa desde el panel |
+| `model` | `deepseek-v4-flash-vision-exp` | Modelo de visión |
+| `detail` | `low` | `low` escala la imagen (más barato); `high` mantiene resolución |
+| `esquema` | `estado_equipo_v1` | Nombre del formato de `datos` (lo define el prompt) |
+
+**El prompt NO está aquí**: vive en `worker/ia_prompt.txt` (editable en caliente
+desde el panel, con historial de los últimos 10). Detalle en
+[Análisis con IA](#-análisis-con-ia-de-visión).
 
 > ⚠️ Al guardar parámetros desde la web, `config.yaml` se regenera completo
 > (pierde los comentarios escritos a mano, pero el formato se conserva).
@@ -336,13 +519,22 @@ ocupa 2 archivos, así el límite equivale a la mitad de eventos).
 
 ## 🏭 Camino a producción
 
-1. **Hoy**: cámara IP de prueba → validar lógica y calibración
-2. **Próximo paso**: cámara industrial fija apuntando al panel, con **shutter
-   rápido** para minimizar el desenfoque por vibración
-3. **Crecimiento natural** (cuando lo necesites):
-   - Envío de la imagen a una IA **solo cuando `hubo_cambio`** (ahorro ~99%)
-   - Verificación anti-oculsión: al confirmar un cambio, esperar ~1 s y
-     recapturar para descartar "algo que se cruzó" (diseño consultado, pendiente
-     de implementar)
-   - FastAPI con `/api/eventos` para consultar el historial
-   - Multi-cámara (un proceso por cámara) + Docker / systemd
+### Ya implementado
+
+- **Análisis con IA solo cuando hay cambio** (ahorro ~99%) — ver
+  [Análisis con IA](#-análisis-con-ia-de-visión)
+- **Prompt configurable en caliente**, con historial
+- **API HTTP** del worker + **panel unificado** en el concentrador
+- **Multi-cámara**: un proceso por cámara, unificados en un panel con selector
+- **Integración con los sistemas externos** (nube y Weizhou)
+
+### Pasos siguientes
+
+1. **Cámara industrial fija** apuntando al panel, con **shutter rápido** para
+   minimizar el desenfoque por vibración (hoy se usa una cámara IP de prueba)
+2. **Verificación anti-oculsión**: al confirmar un cambio, esperar ~1 s y
+   recapturar para descartar "algo que se cruzó" frente a la cámara
+3. **Despliegue como servicio** (Docker / systemd) en la máquina de planta
+4. **Ampliar los campos del análisis**: el display ya muestra programa, etapa y
+   temperatura; hoy van en texto libre dentro de `notas` y podrían promoverse a
+   campos propios para estadística (ver `INTEGRACION_WEIZHOU.md` §6)
