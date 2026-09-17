@@ -220,6 +220,7 @@ Estado actual **completo** (solo lectura): configuración + runtime.
   "config": { "...": "igual que GET /api/config" },
   "runtime": {
     "camara_viva": true,
+    "camara_congelada": false,
     "camara_resolucion": [640, 480],
     "preset_aplicado": "vga",
     "rotacion_efectiva": 90,
@@ -233,7 +234,8 @@ Estado actual **completo** (solo lectura): configuración + runtime.
 
 | Campo de `runtime` | Significado |
 |---|---|
-| `camara_viva` | `true` si hay frames disponibles ahora mismo |
+| `camara_viva` | `true` si hay un frame disponible (puede ser viejo) |
+| `camara_congelada` | `true` si la cámara dejó de entregar frames nuevos — hay frame, pero está congelado y no habrá detecciones |
 | `camara_resolucion` | Resolución real del stream detectada al arrancar |
 | `preset_aplicado` | Preset de parámetros aplicado según la resolución |
 | `rotacion_efectiva` | Rotación en grados que se está aplicando |

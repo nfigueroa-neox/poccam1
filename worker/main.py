@@ -30,6 +30,10 @@ logger = logging.getLogger("main")
 # (si está apagada, sin red o el stream aún no arrancó).
 REINTENTO_SEGUNDOS = 5.0
 
+# Cuántas capturas sin frame nuevo antes de avisar que la cámara está
+# congelada (a 2 capturas/s, 10 equivale a ~5 s sin señal).
+_AVISO_FRAMES = 10
+
 
 class MonitorBackend:
     """Bucle principal: capturar → detectar → registrar (si hay cambio)."""
@@ -71,6 +75,13 @@ class MonitorBackend:
         self.conteo_capturas = 0
         self.conteo_cambios = 0
         self._ultimo_evento = 0.0
+
+        # Vigilancia de cámara congelada: capturar() devuelve el último
+        # frame válido aunque la cámara se haya caído, así que se sigue el
+        # contador de frames del capturador para detectarlo.
+        self._frames_vistos = -1
+        self._frames_sin_avanzar = 0
+        self._congelada = False
 
     def _crear_capturador(self):
         """Crea el capturador con reintento.
@@ -246,9 +257,49 @@ class MonitorBackend:
                     capturador = self.capturador
                 imagen = capturador.capturar()
                 self.conteo_capturas += 1
+
+                # Vigilar que la cámara ENTREGUE frames nuevos. Si se
+                # desconecta, capturar() sigue devolviendo el último frame
+                # válido (congelado), el detector no ve cambio y el sistema
+                # parece "vivo" sin estarlo. Avisamos una sola vez.
+                recibidos = getattr(capturador, "frames_recibidos", None)
+                if recibidos is not None:
+                    if recibidos != self._frames_vistos:
+                        if self._congelada:  # acaba de recuperarse
+                            logger.info(
+                                "✅ La cámara vuelve a entregar frames nuevos")
+                            self._congelada = False
+                            # Descartar la referencia vieja: comparar contra
+                            # un frame de hace minutos daría un cambio falso
+                            # gigante y un evento + análisis de IA inútiles.
+                            try:
+                                self.detector.reiniciar_referencia()
+                            except AttributeError:
+                                pass
+                        self._frames_vistos = recibidos
+                        self._frames_sin_avanzar = 0
+                    else:
+                        self._frames_sin_avanzar += 1
+                        if (self._frames_sin_avanzar == _AVISO_FRAMES
+                                and not self._congelada):
+                            self._congelada = True
+                            logger.error(
+                                "⚠️ La cámara NO entrega frames nuevos desde "
+                                "hace %d capturas: la imagen está congelada. "
+                                "Se sigue comparando el último frame válido; "
+                                "no habrá detecciones hasta que la señal vuelva.",
+                                self._frames_sin_avanzar)
+
                 # Aplicar rotación configurada (0/90/180/270)
                 if self.config.rotacion:
                     imagen = rotar_frame(imagen, self.config.rotacion)
+
+                # Con la cámara caída no se analiza: comparar el mismo frame
+                # congelado solo produiría ruido de compresión y eventos
+                # falsos (y gastaría llamadas a la IA).
+                if self._congelada:
+                    self._esperar(inicio)
+                    continue
 
                 # 2. Comparar contra la anterior
                 resultado = self.detector.procesar(imagen)

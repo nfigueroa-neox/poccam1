@@ -558,3 +558,36 @@ ocupa 2 archivos, así el límite equivale a la mitad de eventos).
    detector ya calcula el área del cambio, así que una heurística que marque
    los cambios que cubren casi todo el ROI sería barata de añadir si hiciera
    falta
+
+## 📡 Cámara desconectada: qué hace el sistema
+
+La captura corre en un hilo aparte que **sigue entregando el último frame
+válido** aunque el stream se caiga, para no morir en cada corte de WiFi. Eso
+tiene una consecuencia importante: el sistema puede **parecer** funcionando con
+la cámara apagada.
+
+Por eso ahora se vigila y se registra:
+
+| Situación | Qué se ve |
+|---|---|
+| Se pierde la señal | `❌ Cámara 'panel-1' SIN SEÑAL: <motivo>` (una sola vez) |
+| La imagen queda congelada | `⚠️ La cámara NO entrega frames nuevos desde hace N capturas` |
+| Vuelve la señal | `✅ Cámara 'panel-1' RECUPERADA tras N s sin señal` |
+| Vuelve a haber frames | `✅ La cámara vuelve a entregar frames nuevos` |
+
+**Con la cámara caída no se generan eventos ni se llama a la IA**: comparar el
+mismo frame congelado solo produciría ruido de compresión y gastaría análisis
+inútiles. Al recuperarse, el detector **descarta su imagen de referencia** para
+no reportar un cambio falso gigante entre el frame viejo y el nuevo.
+
+El estado es consultable en `GET /api/estado-sistema`:
+
+```json
+"runtime": {
+  "camara_viva": true,
+  "camara_congelada": false
+}
+```
+
+> `camara_viva: true` solo significa que **hay** un frame disponible. Si
+> `camara_congelada` es `true`, ese frame es viejo y la cámara está caída.

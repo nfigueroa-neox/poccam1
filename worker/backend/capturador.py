@@ -1,10 +1,13 @@
 """Capturadores de imagen: pantalla, cámara USB/IP y stream HTTP MJPEG."""
 
+import logging
 import threading
 import time
 from typing import Union
 
 import numpy as np
+
+logger = logging.getLogger("worker")
 
 
 def rotar_frame(img, grados):
@@ -78,6 +81,7 @@ class CapturadorCamara:
         self.reconectar_cada = float(reconectar_cada or 0)
         self._frame: np.ndarray | None = None
         self._ultimo_error = None
+        self._frames_recibidos = 0
         self._lock = threading.Lock()
         self._detener = threading.Event()
         self._hilo = threading.Thread(
@@ -121,26 +125,49 @@ class CapturadorCamara:
         Si el stream se corta —o si toca la reconexión periódica— cierra
         y relanza el VideoCapture para evitar el desfase acumulativo."""
         import time as _t
+        # Corte/recuperación de cámara: se avisa una vez en cada transición
+        caido_desde = None
         while not self._detener.is_set():
             try:
                 cap = self._abrir_cap()
             except Exception as e:  # noqa: BLE001 — reconexión
                 self._ultimo_error = str(e)
+                if caido_desde is None:
+                    caido_desde = _t.monotonic()
+                    logger.error(
+                        "❌ Cámara '%s' SIN SEÑAL: %s — se usará el último "
+                        "frame recibido y se reintentará reconectar",
+                        self.nombre, e)
                 if not self._detener.is_set():
                     time.sleep(1.0)  # pausa entre reintentos de apertura
                 continue
+            if caido_desde is not None:
+                logger.info("✅ Cámara '%s' RECUPERADA tras %.0f s sin señal",
+                            self.nombre, _t.monotonic() - caido_desde)
+                caido_desde = None
             inicio = _t.monotonic()
             while not self._detener.is_set():
                 try:
                     ret, frame = cap.read()
                 except Exception as e:  # noqa: BLE001
-                    ret = False
+                    ret, frame = False, None
                     self._ultimo_error = str(e)
                 if ret and frame is not None:
                     with self._lock:
                         self._frame = frame
+                        self._frames_recibidos += 1
                 else:
-                    # Frame caído (corte WiFi/RTSP): salir para reconectar
+                    # Frame caído (corte WiFi/RTSP): se trata como caída de
+                    # señal para que quede registrada, y se sale para
+                    # reconectar.
+                    self._ultimo_error = "la cámara no entregó frame"
+                    if caido_desde is None:
+                        caido_desde = _t.monotonic()
+                        logger.error(
+                            "❌ Cámara '%s' SIN SEÑAL: el dispositivo dejó de "
+                            "entregar frames — se usará el último frame "
+                            "recibido y se reintentará reconectar",
+                            self.nombre)
                     break
                 # Reconexión periódica: corta el buffer acumulado
                 if self.reconectar_cada and \
@@ -149,6 +176,11 @@ class CapturadorCamara:
             cap.release()
             if not self._detener.is_set():
                 time.sleep(0.3)
+
+    @property
+    def frames_recibidos(self) -> int:
+        """Cuántos frames entregó la cámara. Si no sube, está congelada."""
+        return self._frames_recibidos
 
     def capturar(self) -> np.ndarray:
         with self._lock:
@@ -189,6 +221,7 @@ class CapturadorMJPEG:
         self._lock = threading.Lock()
         self._detener = threading.Event()
         self._ultimo_error = None
+        self._frames_recibidos = 0
 
         self._hilo = threading.Thread(
             target=self._consumir_stream, daemon=True
@@ -216,6 +249,11 @@ class CapturadorMJPEG:
         import urllib.request
         import time as _t
 
+        # Rastreo del estado del stream: se avisa UNA vez al caerse y UNA
+        # vez al recuperarse, para que un corte de cámara no pase inadvertido
+        # (antes el error se guardaba pero nunca se registraba).
+        caido_desde = None
+
         while not self._detener.is_set():
             try:
                 req = urllib.request.Request(self.fuente)
@@ -225,11 +263,28 @@ class CapturadorMJPEG:
                     contenido = bytearray()
                     inicio = _t.monotonic()
                     while not self._detener.is_set():
-                        # Chunk grande: vaciar el socket rápido y evitar
-                        # que el backlog de red genere desfase
-                        chunk = resp.read(262144)
+                        # read1(): devuelve lo que haya DISPONIBLE, no espera
+                        # a juntar el tamaño pedido. Con read(n) un stream
+                        # lento bloqueaba hasta acumular n bytes (medido:
+                        # 14 s para 256 KB a ~1.8 KB/frame), congelando la
+                        # captura y disparando timeouts de reconexión.
+                        chunk = resp.read1(262144)
                         if not chunk:
-                            break
+                            # Stream cerrado por el emisor (cámara apagada o
+                            # cable desconectado). Se sale del bucle con una
+                            # excepción para que la caída se registre igual
+                            # que un fallo de red.
+                            raise ConnectionError(
+                                "el emisor cerró el stream MJPEG")
+                        # Solo se declara RECUPERADA cuando llega un frame
+                        # real: abrir la conexión no garantiza que el stream
+                        # vaya a entregar imágenes.
+                        if caido_desde is not None:
+                            logger.info(
+                                "✅ Cámara '%s' RECUPERADA tras %.0f s sin "
+                                "señal", self.nombre,
+                                _t.monotonic() - caido_desde)
+                            caido_desde = None
                         contenido += chunk
                         self._extraer_frames(contenido)
                         # Reconexión periódica: si toca, cortar el stream
@@ -238,6 +293,12 @@ class CapturadorMJPEG:
                             break
             except Exception as e:  # noqa: BLE001 — intencional: reconexión
                 self._ultimo_error = str(e)
+                if caido_desde is None:
+                    caido_desde = _t.monotonic()
+                    logger.error(
+                        "❌ Cámara '%s' SIN SEÑAL: %s — se usará el último "
+                        "frame recibido y se reintentará reconectar",
+                        self.nombre, e)
             # Reconectar tras una pausa corta si se cortó el stream
             if not self._detener.is_set():
                 time.sleep(0.3)
@@ -279,6 +340,12 @@ class CapturadorMJPEG:
         if frame is not None:
             with self._lock:
                 self._frame = frame
+                self._frames_recibidos += 1
+
+    @property
+    def frames_recibidos(self) -> int:
+        """Cuántos frames entregó la cámara. Si no sube, está congelada."""
+        return self._frames_recibidos
 
     def capturar(self) -> np.ndarray:
         with self._lock:

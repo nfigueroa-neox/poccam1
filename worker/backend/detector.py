@@ -83,6 +83,17 @@ class DetectorCambios:
             self.max_desplazamiento = max(1.0,
                                           float(parametros["max_desplazamiento"]))
 
+    def reiniciar_referencia(self):
+        """Olvida la imagen de referencia y los contadores internos.
+
+        Se usa cuando la cámara estuvo caída: al volver la señal, comparar
+        el frame nuevo contra el último válido (que puede ser de minutos
+        antes) produciría un "cambio" enorme y falso. Tras reiniciar, la
+        primera imagen tras la caída pasa a ser la nueva referencia.
+        """
+        self.imagen_referencia = None
+        self.conteo_cambios = 0
+
     def procesar(self, imagen: np.ndarray):
         """
         Procesa una imagen y retorna un dict con el resultado:

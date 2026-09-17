@@ -783,6 +783,7 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
         if config is None:
             return jsonify({"error": "Configuración no disponible"}), 503
         camara_viva = False
+        camara_congelada = False
         capturas = cambios = 0
         if monitor is not None:
             capturas = getattr(monitor, "conteo_capturas", 0)
@@ -792,12 +793,17 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
                 if capturador is not None:
                     capturador.capturar()  # lanza si no hay frames
                     camara_viva = True
+                    camara_congelada = bool(
+                        getattr(monitor, "_congelada", False))
             except Exception:  # noqa: BLE001
                 camara_viva = False
         return jsonify({
             "config": config.a_dict(),
             "runtime": {
                 "camara_viva": camara_viva,
+                # True = hay frame, pero la cámara dejó de entregar nuevos
+                # (desconectada): el sistema no detectará nada mientras siga así.
+                "camara_congelada": camara_congelada,
                 "camara_resolucion": getattr(config, "camara_resolucion", None),
                 "preset_aplicado": getattr(config, "preset_aplicado", None),
                 "rotacion_efectiva": config.rotacion,
