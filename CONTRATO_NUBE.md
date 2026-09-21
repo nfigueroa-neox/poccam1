@@ -38,7 +38,10 @@ Complementa a `API.md` (contrato del worker) y `ARQUITECTURA.md` (diseño actual
 | `GET` | `/api/workers` | — | Workers conocidos |
 | `GET` | `/api/analisis?worker_id=&limit=` | — | Consulta análisis (máx. 500) |
 | `GET` | `/api/eventos?worker_id=&limit=` | — | Consulta eventos |
-| `GET` | `/api/camaras?estado=ok\|alerta` | — | Salud de las cámaras (último heartbeat) |
+| `GET` | `/api/camaras?estado=ok\|alerta` | — | Salud de las cámaras (lista + ids) |
+| `GET` | `/api/camaras/{id}/config` | — | Config vigente de esa cámara |
+| `POST` | `/api/camaras/{id}/config` | — | **Modifica** sus parámetros |
+| `GET` | `/api/camaras/{id}/config/schema` | — | Qué campos se pueden tocar |
 
 > **No hay notificaciones en tiempo real.** El sistema externo debe **consultar**
 > (polling). La API no empuja eventos por SSE ni websockets.
@@ -373,6 +376,107 @@ Authorization: Bearer <token>
 
 Con el mismo formato de §5.1. Sirve para que los cambios hechos desde el
 **front local** queden registrados en la nube (fuente de verdad).
+
+### 5.5 Configurar las cámaras desde el sistema externo
+
+El sistema externo **no necesita token** para esto: son rutas de lectura y
+escritura de configuración pensadas para dashboards.
+
+El flujo es en tres pasos:
+
+#### Paso 1 — Listar las cámaras (obtener los ids)
+
+```http
+GET /api/camaras
+```
+
+```json
+{
+  "camaras": [
+    { "worker_id": "panel-1", "salud": "ok", "con_deteccion": true,
+      "resolucion": [1920, 1080] }
+  ],
+  "todas_ok": true,
+  "endpoints": {
+    "config":  "GET|POST /api/camaras/{camara_id}/config",
+    "esquema": "GET /api/camaras/{camara_id}/config/schema"
+  }
+}
+```
+
+#### Paso 2 — Ver qué campos se pueden tocar
+
+```http
+GET /api/camaras/panel-1/config/schema
+```
+
+Devuelve los bloques (`deteccion`, `captura`, `ia`), el tipo de cada campo y
+—lo más importante— los campos **prohibidos**:
+
+```json
+{
+  "no_modificables": {
+    "captura.camara_fuente": "URL de la cámara: es hardware local",
+    "roi": "Se dibuja sobre el video en el front local",
+    "prompt": "Protegido con contrasena en el worker"
+  }
+}
+```
+
+#### Paso 3 — Leer y modificar
+
+```http
+GET /api/camaras/panel-1/config
+```
+
+```json
+{ "camara_id": "panel-1", "config": { "deteccion": {"min_area_px": 50} },
+  "version": 6, "actualizado": "2026-09-17T17:40:00Z" }
+```
+
+```http
+POST /api/camaras/panel-1/config
+Content-Type: application/json
+
+{ "config": { "deteccion": { "min_area_px": 120 } } }
+```
+
+```json
+{ "ok": true, "camara_id": "panel-1", "version": 7,
+  "aplicado": { "deteccion": { "min_area_px": 120 } },
+  "nota": "El concentrador bajará el cambio en su próximo ciclo..." }
+```
+
+**La escritura es una FUSIÓN, no un reemplazo.** Enviar solo
+`{"deteccion": {"blur_ksize": 9}}` cambia ese campo y **mantiene** el resto.
+Así un cliente no necesita leer antes de escribir.
+
+#### Qué NO se puede cambiar desde afuera
+
+| Campo | Por qué | Comportamiento |
+|---|---|---|
+| `captura.camara_fuente`, `captura.fuente` | La cámara es hardware local del worker | Se **rechaza** con `rechazados: [...]` |
+| `roi` | Se dibuja sobre el video en el front local | Se **rechaza** |
+| `prompt` | Protegido con contraseña en el worker | No está en la API |
+
+Si el cuerpo trae **solo** campos prohibidos, responde `400` con el detalle:
+
+```json
+{ "error": "solo se enviaron campos no modificables",
+  "rechazados": ["camara_fuente"],
+  "detalle": { "captura.camara_fuente": "URL de la cámara: es hardware local" } }
+```
+
+> ⚠️ **`captura.rotacion` es modificable pero delicado.** Cambiar el giro deja
+> el ROI dibujado apuntando a otro sitio, así que tras cambiarlo hay que
+> redibujarlo desde el front local.
+
+#### Cuánto tarda en aplicarse
+
+El cambio se guarda en `config_workers` con una `version` nueva. El
+concentrador baja la config **por polling** (`GET .../config?version=N`), así
+que el retraso depende de su ciclo de consulta. El worker lo aplica en
+caliente, sin reiniciar.
 
 ---
 

@@ -101,6 +101,19 @@ async function manejar(peticion: Peticion, url: URL): Promise<Response> {
     if (ruta === '/api/camaras' && metodo === 'GET') {
       return await listarSaludCamaras(url);
     }
+
+    // ── Configuración por cámara (sistema externo) ──────────────────
+    // El sistema externo lista las cámaras, lee su config y la modifica.
+    const camara = ruta.match(/^\/api\/camaras\/([^/]+)\/config(\/schema)?$/);
+    if (camara) {
+      const camaraId = decodeURIComponent(camara[1]);
+      const esSchema = Boolean(camara[2]);
+      if (esSchema && metodo === 'GET') return json(200, ESQUEMA_CONFIG);
+      if (metodo === 'GET') return await leerConfigCamara(camaraId);
+      if (metodo === 'POST') return await escribirConfigCamara(camaraId, peticion);
+      return json(405, { error: 'método no permitido' });
+    }
+
     if (ruta === '/api/salud' || ruta === '/api/health') {
       return json(200, { ok: true, servicio: 'poccam-backend-nube' });
     }
@@ -267,6 +280,236 @@ async function upsertConfig(
 
 // ── Consultas de lectura ─────────────────────────────────────────────
 
+/**
+ * Campos que el sistema externo puede modificar por cámara.
+ *
+ * Refleja lo que el worker acepta en `/api/externo/config`. La URL de la
+ * cámara y el ROI NO están aquí a propósito: son hardware y encuadre
+ * locales, y el worker los IGNORA si llegan desde fuera.
+ *
+ * Se expone en `GET /api/camaras/{id}/config/schema` para que un cliente
+ * externo sepa qué puede enviar sin leer el código.
+ */
+const ESQUEMA_CONFIG = {
+  descripcion:
+    'Bloques de configuración que se pueden enviar a una cámara. Enviar ' +
+    'solo las claves a cambiar; el resto se mantiene. El concentrador ' +
+    'baja los cambios y los aplica al worker en caliente.',
+  bloques: {
+    deteccion: {
+      descripcion: 'Cómo se decide si hubo un cambio en la imagen',
+      campos: {
+        metodo: {
+          tipo: 'string',
+          valores: ['ssim', 'diff', 'mse'],
+          descripcion: 'ssim es robusto a sombras/luz; diff es más rápido',
+        },
+        min_area_px: {
+          tipo: 'integer',
+          descripcion:
+            'Píxeles mínimos cambiados para disparar un evento. Es el ' +
+            'filtro principal: súbelo para ignorar ruido.',
+        },
+        blur_ksize: {
+          tipo: 'integer',
+          descripcion: 'Desenfoque que elimina ruido de compresión (impar)',
+        },
+        umbral: { tipo: 'float', descripcion: 'Umbral de referencia' },
+        marcar_cambios: {
+          tipo: 'boolean',
+          descripcion: 'Dibujar los contornos del cambio en la imagen',
+        },
+        frames_estables: {
+          tipo: 'integer',
+          descripcion: 'Capturas consecutivas para confirmar un cambio',
+        },
+        min_intervalo_eventos: {
+          tipo: 'float',
+          descripcion: 'Segundos mínimos entre eventos (anti-rebote)',
+        },
+        alinear_imagenes: {
+          tipo: 'boolean',
+          descripcion: 'Compensar vibración de la cámara',
+        },
+        max_desplazamiento: {
+          tipo: 'float',
+          descripcion: 'Desplazamiento máximo a corregir (píxeles)',
+        },
+      },
+    },
+    captura: {
+      descripcion: 'Ritmo de captura',
+      campos: {
+        intervalo_segundos: {
+          tipo: 'float',
+          descripcion: 'Segundos entre capturas',
+        },
+        rotacion: {
+          tipo: 'integer',
+          valores: [0, 90, 180, 270],
+          descripcion:
+            'Grados de giro. OJO: al cambiarlo el ROI dibujado queda ' +
+            'desalineado y hay que redibujarlo desde el front local.',
+        },
+      },
+    },
+    ia: {
+      descripcion: 'Análisis con IA de visión',
+      campos: {
+        esquema: {
+          tipo: 'string',
+          descripcion: 'Nombre del formato del JSON que produce el prompt',
+        },
+        model: { tipo: 'string', descripcion: 'Modelo de visión' },
+        detail: {
+          tipo: 'string',
+          valores: ['low', 'high', 'auto'],
+          descripcion: 'Nivel de detalle que se envía a la IA',
+        },
+      },
+    },
+  },
+  no_modificables: {
+    'captura.camara_fuente': 'URL de la cámara: es hardware local',
+    'captura.fuente': 'Tipo de fuente: local',
+    roi: 'Se dibuja sobre el video en el front local',
+    prompt: 'Protegido con contrasena en el worker',
+  },
+};
+
+/**
+ * Config vigente de una cámara.
+ *
+ * Devuelve el payload tal cual como lo consume el concentrador, más
+ * metadatos útiles para un cliente externo.
+ */
+async function leerConfigCamara(camaraId: string): Promise<Response> {
+  const db = supabase();
+  const { data, error } = await db
+    .from('config_workers')
+    .select('worker_id, payload, version, actualizado')
+    .eq('worker_id', camaraId)
+    .maybeSingle();
+  if (error) return json(500, { error: error.message });
+  if (!data) {
+    // La cámara existe pero nunca se le configuró nada
+    return json(200, {
+      camara_id: camaraId,
+      config: {},
+      version: 0,
+      actualizado: null,
+      nota: 'Sin configuración publicada: el worker usa sus valores locales',
+    });
+  }
+  return json(200, {
+    camara_id: (data as any).worker_id,
+    config: (data as any).payload ?? {},
+    version: (data as any).version,
+    actualizado: (data as any).actualizado,
+  });
+}
+
+/**
+ * Modifica la config de una cámara.
+ *
+ * El cuerpo es `{ "config": { ...bloques } }` y se **fusiona** con lo que
+ * ya había (no reemplaza el objeto completo), para que un cliente pueda
+ * cambiar un solo parámetro sin reenviar todo.
+ *
+ * El concentrador baja el cambio en su próximo ciclo y lo aplica al worker.
+ */
+async function escribirConfigCamara(
+  camaraId: string,
+  req: Peticion,
+): Promise<Response> {
+  const db = supabase();
+
+  // ¿Existe la cámara?
+  const { data: existe } = await db
+    .from('workers')
+    .select('worker_id, nombre')
+    .eq('worker_id', camaraId)
+    .maybeSingle();
+  if (!existe) {
+    return json(404, {
+      error: 'cámara no encontrada',
+      camara_id: camaraId,
+      sugerencia: 'Consulta GET /api/camaras para ver los ids disponibles',
+    });
+  }
+
+  const cuerpo = (await req.json().catch(() => ({}))) as Record<string, any>;
+  // Aceptar tanto {config:{...}} como el payload directo
+  const nuevos = (cuerpo.config ?? cuerpo) as Record<string, any>;
+  if (!nuevos || typeof nuevos !== 'object' || Array.isArray(nuevos)) {
+    return json(400, { error: 'se esperaba un objeto de configuración' });
+  }
+
+  // Rechazar explícitamente lo que NO se puede cambiar desde afuera, en
+  // vez de ignorarlo en silencio: así el cliente sabe que no tuvo efecto.
+  const rechazados: string[] = [];
+  for (const prohibido of ['camara_fuente', 'fuente', 'region', 'roi']) {
+    if (nuevos.captura && prohibido in nuevos.captura) {
+      rechazados.push(`captura.${prohibido}`);
+      delete nuevos.captura[prohibido];
+    }
+    if (prohibido in nuevos) {
+      rechazados.push(prohibido);
+      delete nuevos[prohibido];
+    }
+  }
+  if (Object.keys(nuevos).length === 0 && rechazados.length) {
+    return json(400, {
+      error: 'solo se enviaron campos no modificables',
+      rechazados,
+      detalle: ESQUEMA_CONFIG.no_modificables,
+    });
+  }
+
+  // Fusión con lo existente, bloque por bloque
+  const { data: actual } = await db
+    .from('config_workers')
+    .select('payload, version')
+    .eq('worker_id', camaraId)
+    .maybeSingle();
+  const previo = ((actual as any)?.payload ?? {}) as Record<string, any>;
+  const fusionado: Record<string, any> = { ...previo };
+  for (const [bloque, valor] of Object.entries(nuevos)) {
+    if (valor && typeof valor === 'object' && !Array.isArray(valor)) {
+      // Si el bloque queda vacío tras rechazar campos, no se guarda
+      // (evita dejar `"captura": {}` suelto en la base).
+      const combinado = { ...(previo[bloque] ?? {}), ...valor };
+      if (Object.keys(combinado).length === 0) delete fusionado[bloque];
+      else fusionado[bloque] = combinado;
+    } else {
+      fusionado[bloque] = valor;
+    }
+  }
+
+  const version = Number((actual as any)?.version ?? 0) + 1;
+  const { error } = await db.from('config_workers').upsert(
+    {
+      worker_id: camaraId,
+      payload: fusionado,
+      version,
+      actualizado: new Date().toISOString(),
+    },
+    { onConflict: 'worker_id' },
+  );
+  if (error) return json(500, { error: error.message });
+
+  return json(200, {
+    ok: true,
+    camara_id: camaraId,
+    version,
+    aplicado: nuevos,
+    ...(rechazados.length ? { rechazados } : {}),
+    nota:
+      'El concentrador bajará el cambio en su próximo ciclo y lo aplicará ' +
+      'al worker en caliente. La URL de la cámara nunca se cambia desde aquí.',
+  });
+}
+
 async function listarWorkers(): Promise<Response> {
   const db = supabase();
   const { data, error } = await db
@@ -338,6 +581,11 @@ async function listarSaludCamaras(url: URL): Promise<Response> {
     alertas,
     total: camaras.length,
     todas_ok: alertas.length === 0,
+    // Pistas para que un cliente externo sepa qué hacer después
+    endpoints: {
+      config: 'GET|POST /api/camaras/{camara_id}/config',
+      esquema: 'GET /api/camaras/{camara_id}/config/schema',
+    },
   });
 }
 
