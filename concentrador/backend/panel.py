@@ -378,6 +378,8 @@ class ProxyPanel:
                     "con_deteccion": bool(datos.get("con_deteccion", False)),
                     "capturas": datos.get("capturas", 0),
                     "eventos": datos.get("cambios", 0),
+                    # Config que corre de verdad en el worker
+                    "efectiva": datos.get("efectiva"),
                 })
             problemas = [c for c in camaras if c["salud"] != "ok"]
             return jsonify({
