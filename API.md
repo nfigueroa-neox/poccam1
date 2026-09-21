@@ -362,7 +362,7 @@ de configuración no incluye el prompt (ver `CONTRATO_NUBE.md`).
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/ultimas` | Las 2 capturas más recientes: `{"capturas":[{"archivo","url","fecha"}]}` |
+| `GET` | `/api/ultimas` | El par **antes/después** del último evento: `{"antes": {archivo,url,fecha}, "despues": {...}, "hay_evento": bool}`. `antes` es la referencia contra la que se comparó (con su fecha de captura) y puede ser `null` si aún no hubo eventos |
 | `GET` | `/api/log` | Últimos eventos + `min_area_px` en vivo + sugerencia de ajuste |
 | `DELETE` | `/api/log` | Vacía `eventos.jsonl` |
 | `GET` | `/api/analisis` | Últimos 10 análisis IA (JSON completo que devolvió el modelo) |
@@ -435,6 +435,11 @@ sola llamada. Si un worker no responde, se reporta como `worker_caido`
 > sola cada 5 s cuando aparece. Antes se quedaba esperando en un bucle *antes*
 > de crear su servidor web, así que el panel no tenía de dónde leer los
 > parámetros y los mostraba vacíos sin explicación.
+>
+> ⚠️ **Consecuencia para los clientes:** que el worker responda **ya no implica
+> que su cámara funcione**. No alcanza con comprobar que la API responde: hay
+> que mirar `camara_salud` (o `con_deteccion`). Un `sin_senal` llega con HTTP
+> `200`, porque es un informe, no un error.
 
 > `camara_viva: true` **no** garantiza que la cámara funcione: el capturador
 > conserva el último frame válido, así que puede estar congelado.

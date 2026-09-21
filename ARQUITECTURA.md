@@ -122,7 +122,7 @@ canvas (mouse) → POST /api/roi → roi.json → el detector recarga el archivo
 ```
 GET /                → JSON informativo (servicio, worker_id, dónde está el panel)
 GET /video           → MJPEG en vivo (con ROI dibujado sobre una COPIA del frame)
-GET /api/ultimas     → últimas 2 capturas (bajo demanda al cargar)
+GET /api/ultimas     → par antes/después del último evento (bajo demanda al cargar)
 GET /api/log         → eventos + sugerencias de ajuste (bajo demanda)
 GET /api/eventos     → SSE: avisa cuando hay captura nueva (actualiza la UI)
 GET /api/estado      → SSE: desplazamiento estimado + margen + interior/borde
@@ -141,7 +141,7 @@ GET /capturas/<nombre> → sirve una imagen (protegido contra rutas fuera de la 
 | `/api/roi` | GET | — | `{"region": [x,y,w,h] \| null}` |
 | `/api/roi` | POST | `{"region":[x,y,w,h]}` | `{"ok":true}` |
 | `/api/roi` | DELETE | — | `{"ok":true}` |
-| `/api/ultimas` | GET | — | `{"capturas":[{archivo,url,fecha},...]}` |
+| `/api/ultimas` | GET | — | `{"antes":{archivo,url,fecha}\|null, "despues":{...}\|null, "hay_evento":bool}` |
 | `/api/log` | GET | — | `{"min_area_px":N, "eventos":[...]}` con sugerencias |
 | `/api/log` | DELETE | — | `{"ok":true}` (vacía el JSONL) |
 | `/api/config` | GET | — | parámetros completos (`config.a_dict()`) + `presets` + `camara_resolucion` |

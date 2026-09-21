@@ -371,6 +371,10 @@ externo no tenga que recorrer `workers`.
 | `sin_senal` | No hay ningún frame disponible | ❌ No |
 | `worker_caido` | El proceso del worker no responde | ❌ No |
 
+> `sin_senal` significa que **el worker está vivo pero su cámara no**, así que
+> tampoco hay detección. El worker arranca sin cámara a propósito, para poder
+> configurarlo antes de conectarla.
+
 > `camara_viva: true` **no** garantiza que la cámara funcione: el capturador
 > conserva el último frame válido, así que puede estar congelado. Para saber si
 > realmente hay detección, usar `camara_salud == "ok"`.

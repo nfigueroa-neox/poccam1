@@ -492,7 +492,7 @@
       "description": "Capturas, eventos y análisis generados (solo JSON/URLs; no devuelve imagen binaria salvo /capturas, que es del panel interno).",
       "item": [
         {
-          "name": "Últimas capturas",
+          "name": "Comparación del último cambio (antes/después)",
           "request": {
             "method": "GET",
             "header": [],
@@ -506,7 +506,7 @@
                 "ultimas"
               ]
             },
-            "description": "Las 2 imágenes de eventos más recientes: `{archivo, url, fecha}`."
+            "description": "El par ANTES/DESPUÉS del último evento: las dos imágenes que el detector\nrealmente comparó.\n\n- `antes`: la referencia contra la que se comparó, con su fecha de captura.\n  Puede ser `null` si el worker aún no había establecido referencia.\n- `despues`: la imagen que disparó el evento.\n- `hay_evento`: false cuando todavía no ocurrió ningún cambio.\n\nReemplaza al listado de \"últimas capturas\", que mostraba dos eventos\ndistintos sin relación entre sí."
           }
         },
         {
