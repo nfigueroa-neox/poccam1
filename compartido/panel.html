@@ -53,6 +53,11 @@
                  evita saltos de layout al cargar */
                  object-fit: contain; display: block; background: #000; }
   .captura .fecha { padding: 8px 10px; font-size: 13px; color: #ccc; }
+  /* Títulos del par antes/después: colores distintos para no confundirlos */
+  .captura .par-titulo { padding: 6px 10px; font-size: 12px; font-weight: bold;
+                         letter-spacing: .5px; }
+  .captura .par-titulo.antes { background: #37474f; color: #90caf9; }
+  .captura .par-titulo.despues { background: #33691e; color: #c5e1a5; }
   /* Log de eventos con sugerencias */
   #log-caja { margin-top: 16px; }
   .log-encabezado { display: flex; justify-content: space-between;
@@ -234,7 +239,7 @@
     </div>
 
     <div class="col-der">
-      <h1 style="margin-top:0">📸 Últimas capturas</h1>
+      <h1 style="margin-top:0">📸 Comparación del último cambio</h1>
       <div id="ultimas">
         <p>Cargando...</p>
       </div>
@@ -693,8 +698,11 @@ document.getElementById('btn-aplicar').addEventListener('click', async () => {
 });
 
 // ── Últimas capturas ────────────────────────────────────────────────
-// Actualización INCREMENTAL: solo toca los elementos que cambiaron,
-// sin recargar las imágenes existentes ni causar saltos de scroll.
+// Muestra el par ANTES/DESPUÉS del último evento: las dos imágenes que el
+// detector realmente comparó. Reemplaza al listado de "últimas capturas",
+// que mostraba dos eventos distintos sin relación entre sí.
+// Actualización INCREMENTAL: solo toca lo que cambió, sin recargar las
+// imágenes existentes ni causar saltos de scroll.
 async function actualizarUltimas() {
   let datos;
   try {
@@ -705,33 +713,35 @@ async function actualizarUltimas() {
   }
 
   const cont = document.getElementById('ultimas');
-  const capturas = datos.capturas || [];
+  const antes = datos.antes;
+  const despues = datos.despues;
 
-  // Estado actual: [archivo1, archivo2] en el DOM
-  const actuales = [...cont.querySelectorAll('.captura')]
-    .map(el => el.dataset.archivo || '');
-  const nuevos = capturas.map(c => c.archivo);
-
-  // Si no hay nada y el DOM está vacío → mensaje
-  if (capturas.length === 0) {
-    if (actuales.length === 0) {
-      cont.innerHTML = '<p>Sin capturas aún — cuando se detecte un cambio, la imagen aparecerá aquí.</p>';
+  if (!despues) {
+    // Todavía no hubo ningún evento: no hay par que mostrar
+    const marca = 'sin-eventos';
+    if (cont.dataset.estado !== marca) {
+      cont.dataset.estado = marca;
+      cont.innerHTML = '<p>Sin cambios detectados aún — cuando se detecte ' +
+        'uno, verás aquí las dos imágenes que se compararon.</p>';
     }
     return;
   }
 
-  // Si la lista es idéntica → no tocar nada (cero saltos de layout)
-  if (actuales.length === capturas.length &&
-      actuales.every((a, i) => a === nuevos[i])) {
-    return;
-  }
+  // Firma del par: si no cambió, no se toca el DOM (evita parpadeo)
+  const firma = `${antes ? antes.archivo : '-'}|${despues.archivo}`;
+  if (cont.dataset.estado === firma) return;
+  cont.dataset.estado = firma;
 
-  // Reconstruir solo cuando realmente cambió la lista
-  cont.innerHTML = capturas.map(c => `
-    <div class="captura" data-archivo="${c.archivo}">
-      <img src="${c.url}?t=${Date.now()}" alt="Captura">
-      <div class="fecha">🕐 ${c.fecha}</div>
-    </div>`).join('');
+  const caja = (etiqueta, clase, img) => img ? `
+    <div class="captura" data-archivo="${img.archivo}">
+      <div class="par-titulo ${clase}">${etiqueta}</div>
+      <img src="${img.url}?t=${Date.now()}" alt="${etiqueta}">
+      <div class="fecha">🕐 ${img.fecha || 'sin fecha'}</div>
+    </div>` : '';
+
+  cont.innerHTML =
+    caja('ANTES (referencia)', 'antes', antes) +
+    caja('DESPUÉS (lo que disparó)', 'despues', despues);
 }
 
 // ── Log de cambios con sugerencias ──────────────────────────────────

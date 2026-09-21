@@ -153,6 +153,19 @@ from flask import Flask, Response, jsonify, request, send_file
 RAIZ = Path(__file__).resolve().parent.parent
 RUTA_ROI = RAIZ / "roi.json"
 RUTA_CAPTURAS = RAIZ / "capturas_cambio"
+# Ruta del log de eventos; se reasigna en crear_app con la de la config.
+_RUTA_LOG = RAIZ / "eventos.jsonl"
+
+
+def _resolver_ruta(ruta) -> Path:
+    """Ancla una ruta relativa a RAIZ (la carpeta del worker).
+
+    Las rutas de la config son relativas (`capturas_cambio`), así que sin
+    esto se resolverian contra el directorio de trabajo del proceso y
+    apuntarian a sitios distintos segun desde donde se lance.
+    """
+    p = Path(ruta)
+    return p if p.is_absolute() else (RAIZ / p)
 
 # Notificador de capturas nuevas: el registrador incrementa el contador
 # y el panel web avisa al navegador (SSE) solo cuando hay algo nuevo.
@@ -469,6 +482,77 @@ def ultimas_capturas(cantidad=2):
     return resultado
 
 
+def _leer_ultimo_evento() -> dict | None:
+    """Última línea válida de `eventos.jsonl` (el evento más reciente)."""
+    ruta = Path(_RUTA_LOG) if _RUTA_LOG else None
+    if ruta is None or not ruta.exists():
+        return None
+    try:
+        ultima = None
+        with open(ruta, encoding="utf-8") as f:
+            for linea in f:
+                linea = linea.strip()
+                if linea:
+                    ultima = linea
+        return json.loads(ultima) if ultima else None
+    except (OSError, ValueError) as e:
+        logger.debug(f"No se pudo leer el último evento: {e}")
+        return None
+
+
+def par_antes_despues() -> dict:
+    """Par ANTES/DESPUÉS del último evento detectado.
+
+    ANTES  = la imagen de referencia contra la que se comparó, más la fecha
+             en que ESA imagen se capturó (puede ser bastante anterior al
+             evento, y es el dato que explica por qué se disparó).
+    DESPUÉS = la imagen que disparó el evento.
+
+    Se leen de disco: la referencia vive en `_referencia.png` (archivo fijo
+    que se escribe al disparar un evento) y el después es el evento más
+    reciente del historial.
+    """
+    carpeta = Path(RUTA_CAPTURAS)
+    antes = None
+    despues = None
+
+    # ANTES: la referencia guardada junto al último evento
+    ruta_ref = carpeta / "_referencia.png"
+    if ruta_ref.exists():
+        fecha_ref = ""
+        try:
+            texto = (carpeta / "_referencia.txt").read_text(
+                encoding="utf-8").strip()
+            fecha_ref = datetime.fromisoformat(texto).strftime(
+                "%d/%m/%Y %H:%M:%S.%f")[:-3]
+        except (OSError, ValueError):
+            # Sin fecha propia: no inventar una (el mtime sería la de la
+            # última escritura, que no es cuándo se capturó la imagen).
+            fecha_ref = ""
+        antes = {
+            "archivo": ruta_ref.name,
+            "url": f"/capturas/{ruta_ref.name}",
+            "fecha": fecha_ref,
+        }
+
+    # DESPUÉS: el evento más reciente del historial
+    if carpeta.exists():
+        eventos = sorted(carpeta.glob("evento_*_original.png"),
+                         key=lambda p: p.name, reverse=True)
+        if eventos:
+            archivo = eventos[0]
+            fecha = _parsear_fecha(archivo.name)
+            despues = {
+                "archivo": archivo.name,
+                "url": f"/capturas/{archivo.name}",
+                "fecha": (fecha.strftime("%d/%m/%Y %H:%M:%S")
+                          if fecha else ""),
+            }
+
+    return {"antes": antes, "despues": despues,
+            "hay_evento": despues is not None}
+
+
 def ultimos_analisis_fs(cantidad=10) -> list:
     """
     Lee los últimos análisis JSON de la IA (carpeta analisis_ia junto a
@@ -569,16 +653,18 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
     `monitor` es el MonitorBackend (opcional): permite cambiar la fuente
     de cámara en caliente desde la API sin reiniciar el proceso.
     """
-    global RUTA_CAPTURAS
+    global RUTA_CAPTURAS, _RUTA_LOG
     if config is not None:
-        # Usar la misma carpeta de capturas que el backend
-        RUTA_CAPTURAS = Path(config.output_dir)
+        # Usar la misma carpeta de capturas que el backend. Si la ruta es
+        # relativa se ancla a la raíz del worker (donde vive este módulo),
+        # para que no dependa del directorio desde el que se lance el proceso.
+        RUTA_CAPTURAS = _resolver_ruta(config.output_dir)
     app = Flask(__name__)
 
     # Parámetros del filtro para generar las sugerencias de ajuste
     min_area = config.min_area_px if config is not None else 100
-    ruta_log = Path(config.log_eventos) if config is not None \
-        else RAIZ / "eventos.jsonl"
+    _RUTA_LOG = _resolver_ruta(config.log_eventos if config is not None
+                               else "eventos.jsonl")
 
     def generar_video():
         """Stream MJPEG en vivo con el ROI dibujado encima."""
@@ -670,8 +756,14 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
 
     @app.route("/api/ultimas")
     def api_ultimas():
-        """Las últimas 2 capturas con su fecha."""
-        return jsonify({"capturas": ultimas_capturas(2)})
+        """Par ANTES/DESPUÉS del último evento: las dos imágenes que el
+        detector realmente comparó, cada una con su fecha.
+
+        `antes` es la referencia (contra lo que se comparó) y `despues` la
+        imagen que disparó el evento. Si todavía no hubo ningún evento,
+        `antes` viene en null.
+        """
+        return jsonify(par_antes_despues())
 
     @app.route("/api/log")
     def api_log():
@@ -1094,8 +1186,11 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
     @app.route("/capturas/<nombre>")
     def servir_captura(nombre):
         """Sirve una imagen capturada (con protección contra rutas fuera de la carpeta)."""
-        # Solo nombres de archivos de eventos, sin separadores de ruta
-        if "/" in nombre or "\\" in nombre or not nombre.startswith("evento_"):
+        # Solo nombres de la carpeta de capturas, sin separadores de ruta.
+        # Se permiten los archivos internos de la referencia (`_referencia.png`)
+        # que el panel muestra como "antes".
+        permitido = nombre.startswith("evento_") or nombre == "_referencia.png"
+        if "/" in nombre or "\\" in nombre or not permitido:
             return "Archivo no permitido", 400
         ruta = RUTA_CAPTURAS / nombre
         if not ruta.exists():

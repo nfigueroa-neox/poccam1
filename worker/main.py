@@ -328,6 +328,10 @@ class MonitorBackend:
                             # lo que disparó el detector.
                             "imagen": resultado["imagen_analizada"],
                             "imagen_marcada": resultado["imagen_marcada"],
+                            # Contra qué se comparó y cuándo: es lo que explica
+                            # el evento en el panel (antes/después).
+                            "imagen_referencia": resultado.get("imagen_referencia"),
+                            "referencia_desde": resultado.get("referencia_desde"),
                             "score": resultado["score"],
                             "area_px": resultado["area_px"],
                             "area_borde": resultado.get("area_borde", 0),

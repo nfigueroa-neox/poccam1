@@ -44,6 +44,10 @@ class DetectorCambios:
         self.max_desplazamiento = max(1.0, max_desplazamiento)
         # Referencia estable: la última imagen confirmada sin cambio
         self.imagen_referencia: np.ndarray | None = None
+        # Cuándo se capturó `imagen_referencia`. Es lo que explica un evento:
+        # la referencia puede ser de hace horas, y sin su fecha dos imágenes
+        # parecidas no explican por qué se disparó el cambio.
+        self.referencia_desde = None
         # Contador de cambios consecutivos respecto a la referencia
         self.conteo_cambios = 0
         # Último desplazamiento estimado (para diagnóstico)
@@ -92,6 +96,14 @@ class DetectorCambios:
         primera imagen tras la caída pasa a ser la nueva referencia.
         """
         self.imagen_referencia = None
+        self.referencia_desde = None
+        self.conteo_cambios = 0
+
+    def _marcar_referencia(self, imagen):
+        """Guarda la imagen como referencia y registra CUÁNDO se capturó."""
+        from datetime import datetime
+        self.imagen_referencia = imagen
+        self.referencia_desde = datetime.now().astimezone()
         self.conteo_cambios = 0
 
     def procesar(self, imagen: np.ndarray):
@@ -124,8 +136,7 @@ class DetectorCambios:
 
         # Primera captura o referencia perdida → establecerla
         if self.imagen_referencia is None:
-            self.imagen_referencia = imagen_analizada
-            self.conteo_cambios = 0
+            self._marcar_referencia(imagen_analizada)
             return {"hubo_cambio": False, "score": 0.0, "area_px": 0,
                     "imagen_marcada": None, "imagen_analizada": imagen_analizada}
 
@@ -133,8 +144,7 @@ class DetectorCambios:
         if self.imagen_referencia.shape != imagen_analizada.shape:
             logger.debug("Tamaño de imagen cambiado (ROI modificado) — "
                          "reiniciando referencia")
-            self.imagen_referencia = imagen_analizada
-            self.conteo_cambios = 0
+            self._marcar_referencia(imagen_analizada)
             return {"hubo_cambio": False, "score": 0.0, "area_px": 0,
                     "imagen_marcada": None, "imagen_analizada": imagen_analizada}
 
@@ -171,10 +181,14 @@ class DetectorCambios:
             # Cambio detectado respecto a la referencia estable
             self.conteo_cambios += 1
             if self.conteo_cambios >= self.frames_estables:
-                # Cambio CONFIRMADO: persiste varias capturas
+                # Cambio CONFIRMADO: persiste varias capturas.
+                # Se guarda la referencia que se ACABA de usar (y su fecha)
+                # ANTES de reemplazarla: es lo que explica el evento, y una
+                # vez actualizada ya no se puede reconstruir.
+                resultado["imagen_referencia"] = self.imagen_referencia
+                resultado["referencia_desde"] = self.referencia_desde
                 # Actualizar la referencia al nuevo estado estable
-                self.imagen_referencia = imagen_analizada
-                self.conteo_cambios = 0
+                self._marcar_referencia(imagen_analizada)
                 resultado["hubo_cambio"] = True
                 resultado["imagen_analizada"] = imagen_analizada
                 return resultado
@@ -185,8 +199,7 @@ class DetectorCambios:
             return resultado
         else:
             # Sin cambio respecto a la referencia → estado estable
-            self.conteo_cambios = 0
-            self.imagen_referencia = imagen_analizada
+            self._marcar_referencia(imagen_analizada)
             resultado["imagen_analizada"] = imagen_analizada
             return resultado
 

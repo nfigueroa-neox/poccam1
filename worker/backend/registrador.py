@@ -12,6 +12,12 @@ from backend.web import notificar_captura_nueva, notificar_analisis_nuevo
 logger = logging.getLogger("backend")
 
 
+def _anclar(ruta, raiz: Path) -> Path:
+    """Ancla una ruta relativa a `raiz`; deja las absolutas intactas."""
+    p = Path(ruta)
+    return p if p.is_absolute() else (raiz / p)
+
+
 class RegistradorEventos:
     """
     Escribe cada evento de cambio en:
@@ -21,11 +27,16 @@ class RegistradorEventos:
 
     def __init__(self, config: Config):
         self.config = config
-        self.ruta_log = Path(config.log_eventos)
-        self.output_dir = Path(config.output_dir)
+        # Rutas ancladas a la carpeta del worker: la config las guarda
+        # relativas, y resolverlas contra el directorio de trabajo hacía que
+        # dependieran de desde dónde se lanzara el proceso (y que el
+        # registrador escribiera en un sitio distinto de donde leía la API).
+        raiz = Path(__file__).resolve().parent.parent
+        self.ruta_log = _anclar(config.log_eventos, raiz)
+        self.output_dir = _anclar(config.output_dir, raiz)
         self.max_imagenes = config.max_imagenes
         # Carpeta donde se guardan los análisis JSON de la IA
-        self.analisis_dir = Path(config.output_dir).parent / "analisis_ia"
+        self.analisis_dir = self.output_dir.parent / "analisis_ia"
 
         if config.save_changes:
             self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -37,6 +48,8 @@ class RegistradorEventos:
         """
         Persiste un evento de cambio. `evento` contiene al menos:
             score, area_px, camara, imagen (np.ndarray), imagen_marcada (opcional)
+            imagen_referencia (np.ndarray, opcional): contra qué se comparó
+            referencia_desde (datetime, opcional): cuándo se capturó esa referencia
         Retorna el id del evento (timestamp).
         """
         evento_id = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S_%f")[:-3]
@@ -53,6 +66,7 @@ class RegistradorEventos:
                 ruta_marcada = str(self.output_dir / f"evento_{evento_id}_marcado.png")
                 cv2.imwrite(ruta_marcada, evento["imagen_marcada"])
 
+            self._guardar_referencia(evento)
             self._limitar_imagenes()
 
         # Escribir línea JSON en el log de eventos
@@ -67,6 +81,9 @@ class RegistradorEventos:
             "area_borde": int(evento.get("area_borde", 0)),
             "imagen_original": ruta_original,
             "imagen_marcada": ruta_marcada,
+            "referencia_desde": (evento.get("referencia_desde").isoformat(
+                timespec="milliseconds")
+                if evento.get("referencia_desde") else None),
             "capturas_total": evento.get("capturas_total", 0),
         }
 
@@ -86,6 +103,40 @@ class RegistradorEventos:
         self._analizar_si_ia(ruta_original, evento_id, evento)
 
         return evento_id
+
+    def _guardar_referencia(self, evento: dict):
+        """Escribe la imagen de referencia del evento en un archivo FIJO.
+
+        La referencia es contra lo que el detector comparó para disparar este
+        evento. Se guarda en `_referencia.png` (nombre fijo, se sobrescribe)
+        y su fecha en `_referencia.txt`.
+
+        Va FUERA del patrón `evento_*.png` a propósito: así el historial de
+        eventos y su rotación (`_limitar_imagenes`) no la tocan.
+
+        Solo se escribe al disparar un evento, no en cada captura: con
+        capturas a 2/s, escribir siempre sería tirar disco a la basura.
+        """
+        referencia = evento.get("imagen_referencia")
+        if referencia is None:
+            return
+        import cv2
+        try:
+            cv2.imwrite(str(self.output_dir / "_referencia.png"), referencia)
+        except Exception as e:  # noqa: BLE001 — no debe tumbar el registro
+            logger.warning(f"No se pudo guardar la referencia: {e}")
+            return
+
+        # La fecha se guarda aparte porque la del archivo (mtime) cambia al
+        # sobrescribirlo y no refleja cuándo se capturó la imagen.
+        desde = evento.get("referencia_desde")
+        if desde is not None:
+            try:
+                (self.output_dir / "_referencia.txt").write_text(
+                    desde.isoformat(timespec="milliseconds"),
+                    encoding="utf-8")
+            except OSError as e:
+                logger.warning(f"No se pudo guardar la fecha de referencia: {e}")
 
     def _limitar_imagenes(self):
         """
