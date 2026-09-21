@@ -28,6 +28,44 @@ from pathlib import Path
 
 logger = logging.getLogger("backend")
 
+def _config_efectiva(config) -> dict:
+    """Configuración que está corriendo AHORA en este worker.
+
+    No es lo mismo que lo configurado desde afuera: un cliente externo puede
+    haber enviado solo `min_area_px`, y el resto sigue en los valores locales
+    del worker. Sin esto, un dashboard tendría que adivinar los defaults.
+
+    Devuelve solo los campos que importan para operar (tuning y ritmo), no
+    todo `config.a_dict()`.
+    """
+    if config is None:
+        return {}
+    return {
+        "deteccion": {
+            "metodo": config.metodo,
+            "min_area_px": config.min_area_px,
+            "blur_ksize": config.blur_ksize,
+            "umbral": config.umbral,
+            "frames_estables": config.frames_estables,
+            "min_intervalo_eventos": config.min_intervalo_eventos,
+            "marcar_cambios": config.marcar_cambios,
+            "alinear_imagenes": config.alinear_imagenes,
+            "max_desplazamiento": config.max_desplazamiento,
+        },
+        "captura": {
+            "intervalo_segundos": config.intervalo_segundos,
+            "rotacion": config.rotacion,
+            "reconectar_segundos": getattr(config, "reconectar_segundos", None),
+        },
+        "ia": {
+            "enabled": bool(config.ia_enabled),
+            "esquema": config.ia_esquema,
+            "model": config.ia_model,
+            "detail": config.ia_detail,
+        },
+    }
+
+
 # Índice de la API, en un solo lugar. Se publica en `GET /api` y lo consume
 # la página de documentación del concentrador, para no mantener una copia
 # aparte que se desactualice.
@@ -970,6 +1008,10 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
             "capturas": capturas,
             "cambios": cambios,
             "con_deteccion": salud == "ok",
+            # Configuración que está corriendo DE VERDAD. Un cliente externo
+            # no puede deducirla: la config que llega por la nube puede estar
+            # incompleta, y entonces el worker usa sus valores locales.
+            "efectiva": _config_efectiva(config),
         })
 
     @app.route("/api/config-eventos")

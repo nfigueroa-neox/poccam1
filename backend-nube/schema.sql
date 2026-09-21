@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS workers (
     -- Salud de la cámara: ok | congelada | sin_senal | worker_caido
     camara_salud    TEXT,
     camara_motivo   TEXT,                       -- detalle legible del problema
+    -- Config que corre DE VERDAD (no lo configurado desde afuera)
+    config_efectiva JSONB,
     creado          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

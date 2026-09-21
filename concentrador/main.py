@@ -266,6 +266,10 @@ class Concentrador:
                 "ia_activa": rt.get("ia_activa", False),
                 "capturas": rt.get("capturas", 0),
                 "eventos": rt.get("cambios", 0),
+                # Config que corre DE VERDAD en el worker. Un dashboard no
+                # puede deducirla: la config que llega por la nube puede
+                # estar incompleta y el worker completa con sus valores.
+                "efectiva": rt.get("efectiva"),
             }
             if salud != "ok":
                 alertas.append({

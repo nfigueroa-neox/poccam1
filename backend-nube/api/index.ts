@@ -354,7 +354,7 @@ async function rutasConcentrador(
     });
     if (error) return json(500, { error: error.message });
 
-    // Actualizar "ultima_vista" y la salud de cada worker reportado
+    // Actualizar "ultima_vista", la salud y la config efectiva de cada worker
     const workers = (cuerpo.workers ?? {}) as Record<string, any>;
     for (const workerId of Object.keys(workers)) {
       const rt = workers[workerId] ?? {};
@@ -366,6 +366,7 @@ async function rutasConcentrador(
             ultima_vista: new Date().toISOString(),
             camara_salud: rt.camara_salud ?? null,
             camara_motivo: rt.camara_motivo ?? null,
+            config_efectiva: rt.efectiva ?? null,
           },
           { onConflict: 'worker_id' },
         );
@@ -580,24 +581,20 @@ async function escribirConfigCamara(
     return json(400, { error: 'se esperaba un objeto de configuración' });
   }
 
-  // Rechazar explícitamente lo que NO se puede cambiar desde afuera, en
-  // vez de ignorarlo en silencio: así el cliente sabe que no tuvo efecto.
-  const rechazados: string[] = [];
-  for (const prohibido of ['camara_fuente', 'fuente', 'region', 'roi']) {
-    if (nuevos.captura && prohibido in nuevos.captura) {
-      rechazados.push(`captura.${prohibido}`);
-      delete nuevos.captura[prohibido];
-    }
-    if (prohibido in nuevos) {
-      rechazados.push(prohibido);
-      delete nuevos[prohibido];
-    }
-  }
-  if (Object.keys(nuevos).length === 0 && rechazados.length) {
+  // Validar ANTES de guardar. El worker también valida, pero si se guardara
+  // algo inválido el cliente recibiría 200 y creería que aplicó: el error
+  // solo aparecería en el log del concentrador, en silencio para el cliente.
+  const errores = validarConfig(nuevos);
+  if (errores.length) {
+    // Separar los campos prohibidos para dar un mensaje más útil
+    const prohibidos = errores.filter((e) => e.includes('no se puede cambiar'));
     return json(400, {
-      error: 'solo se enviaron campos no modificables',
-      rechazados,
-      detalle: ESQUEMA_CONFIG.no_modificables,
+      error: 'configuración inválida',
+      errores,
+      ...(prohibidos.length
+        ? { no_modificables: ESQUEMA_CONFIG.no_modificables }
+        : {}),
+      sugerencia: 'Consulta GET /api/camaras/{id}/config/schema',
     });
   }
 
@@ -638,11 +635,142 @@ async function escribirConfigCamara(
     camara_id: camaraId,
     version,
     aplicado: nuevos,
-    ...(rechazados.length ? { rechazados } : {}),
     nota:
       'El concentrador bajará el cambio en su próximo ciclo y lo aplicará ' +
       'al worker en caliente. La URL de la cámara nunca se cambia desde aquí.',
   });
+}
+
+/**
+ * Reglas de validación por campo.
+ *
+ * Los rangos coinciden con los que aplica el worker en
+ * `_aplicar_config` (`worker/backend/web.py`). Si se cambian allí, hay que
+ * cambiarlos aquí: si no, la API aceptaría algo que el worker rechaza, y el
+ * cliente creería que guardó bien.
+ *
+ * `tipo` solo describe el tipo para construir el mensaje de error.
+ */
+const REGLAS: Record<
+  string,
+  Record<
+    string,
+    { tipo: string; valores?: unknown[]; min?: number; entero?: boolean }
+  >
+> = {
+  deteccion: {
+    metodo: { tipo: 'string', valores: ['ssim', 'diff', 'mse'] },
+    umbral: { tipo: 'number', min: 0 },
+    min_area_px: { tipo: 'integer', min: 0, entero: true },
+    blur_ksize: { tipo: 'integer', min: 0, entero: true },
+    marcar_cambios: { tipo: 'boolean' },
+    frames_estables: { tipo: 'integer', min: 1, entero: true },
+    min_intervalo_eventos: { tipo: 'number', min: 0 },
+    alinear_imagenes: { tipo: 'boolean' },
+    max_desplazamiento: { tipo: 'number', min: 1 },
+  },
+  captura: {
+    intervalo_segundos: { tipo: 'number', min: 0.01 },
+    rotacion: { tipo: 'integer', valores: [0, 90, 180, 270], entero: true },
+  },
+  ia: {
+    esquema: { tipo: 'string' },
+    model: { tipo: 'string' },
+    detail: { tipo: 'string', valores: ['low', 'high', 'auto'] },
+  },
+};
+
+/** Campos que existen en el esquema pero NO se pueden cambiar desde afuera. */
+const PROHIBIDOS = new Set([
+  'camara_fuente', 'fuente', 'region', 'roi', 'prompt', 'nombre_camara',
+  'worker_id', 'reconectar_segundos', 'monitor', 'aplicar_preset_al_iniciar',
+]);
+
+/**
+ * Valida un payload de configuración contra REGLAS.
+ *
+ * Devuelve la lista de errores encontrados (vacía si todo está bien). Se
+ * acumulan todos en vez de fallar al primero, para que el cliente pueda
+ * corregir de una vez.
+ */
+function validarConfig(datos: Record<string, any>): string[] {
+  const errores: string[] = [];
+
+  for (const [bloque, valor] of Object.entries(datos)) {
+    const reglas = REGLAS[bloque];
+
+    if (!reglas) {
+      errores.push(
+        `bloque desconocido: "${bloque}" (válidos: ${Object.keys(REGLAS).join(', ')})`,
+      );
+      continue;
+    }
+    if (valor === null || typeof valor !== 'object' || Array.isArray(valor)) {
+      errores.push(`"${bloque}" debe ser un objeto`);
+      continue;
+    }
+
+    for (const [campo, v] of Object.entries(valor as Record<string, unknown>)) {
+      const ruta = `${bloque}.${campo}`;
+      const regla = reglas[campo];
+
+      if (!regla) {
+        if (PROHIBIDOS.has(campo)) {
+          errores.push(
+            `${ruta}: no se puede cambiar desde afuera ` +
+              '(es hardware o encuadre local)',
+          );
+        } else {
+          errores.push(
+            `${ruta}: campo desconocido (válidos: ${Object.keys(reglas).join(', ')})`,
+          );
+        }
+        continue;
+      }
+
+      // Valores permitidos explícitos
+      if (regla.valores && !regla.valores.includes(v)) {
+        errores.push(
+          `${ruta}: "${String(v)}" no es válido ` +
+            `(permitidos: ${regla.valores.map((x) => JSON.stringify(x)).join(', ')})`,
+        );
+        continue;
+      }
+
+      // Tipo booleano
+      if (regla.tipo === 'boolean') {
+        if (typeof v !== 'boolean') {
+          errores.push(`${ruta}: se esperaba true o false`);
+        }
+        continue;
+      }
+
+      // Tipos numéricos
+      if (regla.tipo === 'number' || regla.tipo === 'integer') {
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
+          errores.push(`${ruta}: se esperaba un número`);
+          continue;
+        }
+        if (regla.entero && !Number.isInteger(v)) {
+          errores.push(`${ruta}: se esperaba un entero`);
+          continue;
+        }
+        if (regla.min !== undefined && v < regla.min) {
+          errores.push(`${ruta}: debe ser >= ${regla.min} (recibido ${v})`);
+        }
+        continue;
+      }
+
+      // Strings
+      if (regla.tipo === 'string') {
+        if (typeof v !== 'string' || v.trim() === '') {
+          errores.push(`${ruta}: se esperaba un texto no vacío`);
+        }
+      }
+    }
+  }
+
+  return errores;
 }
 
 async function listarWorkers(): Promise<Response> {
@@ -699,6 +827,9 @@ async function listarSaludCamaras(url: URL): Promise<Response> {
         capturas: rt.capturas ?? 0,
         eventos: rt.eventos ?? 0,
         visto: fila.timestamp,
+        // Config que corre DE VERDAD en el worker (no lo que se configuró
+        // desde afuera, que puede estar incompleto).
+        efectiva: rt.efectiva ?? null,
       });
     }
   }

@@ -19,13 +19,16 @@
 -- ── workers: salud de la cámara ────────────────────────────────────
 -- ok | congelada | sin_senal | worker_caido
 ALTER TABLE workers
-    ADD COLUMN IF NOT EXISTS camara_salud  TEXT,
-    ADD COLUMN IF NOT EXISTS camara_motivo TEXT;
+    ADD COLUMN IF NOT EXISTS camara_salud     TEXT,
+    ADD COLUMN IF NOT EXISTS camara_motivo    TEXT,
+    ADD COLUMN IF NOT EXISTS config_efectiva  JSONB;
 
 COMMENT ON COLUMN workers.camara_salud IS
     'ok | congelada | sin_senal | worker_caido (del último heartbeat)';
 COMMENT ON COLUMN workers.camara_motivo IS
     'Detalle legible del problema; vacío si la cámara está ok';
+COMMENT ON COLUMN workers.config_efectiva IS
+    'Config que corre DE VERDAD en el worker (deteccion/captura/ia)';
 
 -- ── heartbeats: alertas del ciclo ──────────────────────────────────
 -- Lista de cámaras con problemas, ya filtrada por el concentrador.
