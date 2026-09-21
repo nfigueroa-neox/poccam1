@@ -93,6 +93,15 @@
   .log-metricas { color: #eee; margin: 2px 0; }
   .log-sugerencia { color: #ffb74d; margin: 4px 0 0; padding-left: 8px;
                     border-left: 3px solid #ffb74d; }
+  /* Grupos de parámetros: separan captura / detección / vibración / IA */
+  .param-grupo { border: 1px solid #37474f; border-radius: 8px;
+                 background: #181d22; padding: 10px 14px 12px;
+                 margin: 0 0 12px; }
+  .param-grupo legend { color: #8fd6bd; font-size: 13px; font-weight: bold;
+                        padding: 0 6px; }
+  /* El último grupo no necesita margen inferior extra antes de los botones */
+  .param-grupo:last-of-type { margin-bottom: 8px; }
+  .param-grupo .param-grid { margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -122,57 +131,94 @@
         <p class="info">Cada campo se aplica al terminar de editarlo
            (Enter o clic fuera). El botón 💾 Aplicar aplica todo de una
            vez. Todo se guarda en config.yaml.</p>
-        <div class="param-grid">
-          <label title="Identidad única de este worker (viaja en el contrato hacia la nube)">Worker ID
-            <input id="p-worker-id" type="text" placeholder="panel-lavado-1">
-          </label>
-          <label title="Nombre del formato del JSON que devuelve la IA (ej: personas_v1)">Esquema IA
-            <input id="p-esquema" type="text" placeholder="generico_v1">
-          </label>
-          <label title="Cómo procesa la IA la imagen. low la escala a 512x512 (más barato, pero pierde números y texto pequeño); high mantiene la resolución original.">Detalle IA
-            <select id="p-detail">
-              <option value="low">low (512x512, más barato)</option>
-              <option value="high">high (resolución original)</option>
-              <option value="auto">auto</option>
-            </select>
-          </label>
-          <label>Intervalo de sondeo (s)
-            <input id="p-intervalo" type="number" step="0.05" min="0.05">
-          </label>
-          <label>Método
-            <select id="p-metodo">
-              <option value="ssim">ssim</option>
-              <option value="diff">diff</option>
-              <option value="mse">mse</option>
-            </select>
-          </label>
-          <label>min_area_px (mín. de cambio)
-            <input id="p-min-area" type="number" step="1" min="0"
-                   title="No aplica con el método mse">
-          </label>
-          <label>Umbral (sensibilidad px, 0-1)
-            <input id="p-umbral" type="number" step="0.01" min="0" max="1"
-                   title="Más bajo = más sensible. En ssim 0.5 ≈ el corte clásico">
-          </label>
-          <label>Blur (k, impar)
-            <input id="p-blur" type="number" step="1" min="0">
-          </label>
-          <label>Frames estables
-            <input id="p-frames" type="number" step="1" min="1">
-          </label>
-          <label>Min. entre eventos (s)
-            <input id="p-intervalo-eventos" type="number" step="0.1" min="0">
-          </label>
-          <label>Máx. desplazamiento (px)
-            <input id="p-max-desp" type="number" step="0.5" min="1"
-                   title="Solo aplica si la compensación de vibración está activa">
-          </label>
-        </div>
-        <div class="param-checks">
-          <label><input id="p-marcar" type="checkbox"
-                 title="No aplica con el método mse"> Marcar cambios</label>
-          <label><input id="p-alinear" type="checkbox"> Compensar vibración</label>
-        </div>
+
+        <fieldset class="param-grupo">
+          <legend>🪪 Identidad del equipo</legend>
+          <div class="param-grid">
+            <label title="Identidad única de este worker: viaja en el contrato hacia la nube y hacia Weizhou, y es la clave del mapeo de máquinas. Cambiarlo afecta ambos destinos.">Worker ID
+              <input id="p-worker-id" type="text" placeholder="panel-lavado-1">
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="param-grupo">
+          <legend>📷 Captura</legend>
+          <div class="param-grid">
+            <label>Intervalo de sondeo (s)
+              <input id="p-intervalo" type="number" step="0.05" min="0.05"
+                     title="Cada cuánto se pide una imagen a la cámara. 0.5 = 2 capturas por segundo">
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="param-grupo">
+          <legend>🎯 Detección (cuándo se considera que hubo un cambio)</legend>
+          <div class="param-grid">
+            <label>Método
+              <select id="p-metodo"
+                      title="Cómo compara las imágenes. ssim tolera sombras y luz; diff es más rápido">
+                <option value="ssim">ssim</option>
+                <option value="diff">diff</option>
+                <option value="mse">mse</option>
+              </select>
+            </label>
+            <label>min_area_px (mín. de cambio)
+              <input id="p-min-area" type="number" step="1" min="0"
+                     title="Píxeles mínimos cambiados para disparar un evento. Es el filtro principal: súbelo para ignorar ruido. No aplica con el método mse">
+            </label>
+            <label>Umbral (sensibilidad px, 0-1)
+              <input id="p-umbral" type="number" step="0.01" min="0" max="1"
+                     title="Más bajo = más sensible. En ssim 0.5 ≈ el corte clásico">
+            </label>
+            <label>Blur (k, impar)
+              <input id="p-blur" type="number" step="1" min="0"
+                     title="Desenfoque que elimina el ruido de compresión de la imagen">
+            </label>
+            <label>Frames estables
+              <input id="p-frames" type="number" step="1" min="1"
+                     title="Capturas consecutivas que deben coincidir para confirmar un cambio">
+            </label>
+            <label>Min. entre eventos (s)
+              <input id="p-intervalo-eventos" type="number" step="0.1" min="0"
+                     title="Anti-rebote: tiempo mínimo entre dos eventos seguidos">
+            </label>
+          </div>
+          <div class="param-checks">
+            <label><input id="p-marcar" type="checkbox"
+                   title="Dibuja los contornos de lo que cambió, sobre la imagen guardada. No aplica con el método mse"> Marcar cambios</label>
+          </div>
+        </fieldset>
+
+        <fieldset class="param-grupo">
+          <legend>📳 Vibración (si la cámara se mueve)</legend>
+          <div class="param-checks">
+            <label><input id="p-alinear" type="checkbox"
+                   title="Corrige el desplazamiento de la imagen antes de compararla"> Compensar vibración</label>
+          </div>
+          <div class="param-grid">
+            <label>Máx. desplazamiento (px)
+              <input id="p-max-desp" type="number" step="0.5" min="1"
+                     title="Desplazamiento máximo a corregir. Solo aplica con la compensación activa">
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="param-grupo">
+          <legend>🤖 Análisis con IA</legend>
+          <div class="param-grid">
+            <label title="Nombre del formato del JSON que devuelve la IA (ej: personas_v1)">Esquema IA
+              <input id="p-esquema" type="text" placeholder="generico_v1">
+            </label>
+            <label title="Cómo procesa la IA la imagen. low la escala a 512x512 (más barato, pero pierde números y texto pequeño); high mantiene la resolución original.">Detalle IA
+              <select id="p-detail">
+                <option value="low">low (512x512, más barato)</option>
+                <option value="high">high (resolución original)</option>
+                <option value="auto">auto</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
+
         <div class="param-botones">
           <label class="preset-label"
                  title="Ajusta min_area_px, blur y max_desplazamiento según la resolución de la cámara (el display ocupa más píxeles)">📷 Preset:
@@ -465,6 +511,13 @@ function actualizarHabilitados() {
   document.getElementById('p-max-desp').disabled = !alinear;
   // `umbral` siempre aplica: mse lo usa como corte de score,
   // ssim/diff como sensibilidad a nivel píxel.
+
+  // Atenuar el grupo de parámetros dependientes cuando no aplican, para
+  // que se vea de un vistazo qué está en juego.
+  document.getElementById('p-max-desp')
+          .closest('label').style.opacity = alinear ? '1' : '0.45';
+  document.getElementById('p-min-area')
+          .closest('label').style.opacity = esMse ? '0.45' : '1';
 }
 
 async function aplicar(cuerpo, mensajeExito) {
