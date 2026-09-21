@@ -168,8 +168,8 @@ otros equipos de la red), con un **selector** para elegir qué worker ver.
 
 | Puerto | Qué es |
 |---|---|
-| **8080** | **El panel web** (concentrador) — el único que necesitas abrir |
-| 5000 | API del worker (JSON + video). Ya no sirve el panel HTML |
+| **8080** | **El panel web** (concentrador). El panel está en `/` y la **documentación de la API** en `/api` |
+| 5000 | API del worker (JSON + video). Ya no sirve el panel HTML; su índice está en `/api` |
 | 5001, 5002... | Los siguientes workers, uno por cámara |
 
 ## 🌐 Panel web
@@ -193,6 +193,21 @@ una pestaña por worker.
 no aplican en el modo actual — p. ej. `min_area_px` no aplica con el método
 `mse`, y `max_desplazamiento` solo aplica con la compensación de vibración
 activa.
+
+### 📖 Documentación navegable: `http://localhost:8080/api`
+
+Lista las rutas de la API del concentrador y, **en vivo**, las del worker
+activo. Útil para no tener que leer el código ni buscar en los `.md`.
+
+| URL | Qué muestra |
+|---|---|
+| **`http://localhost:8080/api`** | Rutas del concentrador **+ las del worker activo** |
+| `http://localhost:5000/api` | Índice JSON del worker (para clientes) |
+| `https://backend-nube.vercel.app` | Rutas de la API en la nube |
+
+> Las rutas del worker se descubren pidiendo su propio `/api`, así que la
+> página refleja lo que hay de verdad. Si el worker está caído, lo indica en
+> lugar de fallar.
 
 ## ⚙️ Cómo funciona el pipeline (por frame)
 
