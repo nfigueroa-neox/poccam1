@@ -5,18 +5,28 @@ contrato con el concentrador (`CONTRATO_NUBE.md`) y persiste en **Supabase**.
 
 > 📖 Para la puesta en marcha paso a paso, los problemas conocidos del despliegue
 > y cómo verificarlo, ver **[`../DESPLIEGUE.md`](../DESPLIEGUE.md)**.
+> 📖 Para la **referencia de todos los endpoints** (agrupados por quién los
+> llama), ver **[`../API_NUBE.md`](../API_NUBE.md)**.
 
 ## Responsabilidad
 
 | Función | Endpoint |
 |---|---|
-| Entregar configuración al concentrador | `GET /api/concentrador/config?version=N` |
+| **Sistema externo — consultar** | |
+| Listar cámaras con su salud | `GET /api/camaras?estado=ok\|alerta` |
+| Consultar análisis de la IA | `GET /api/analisis?worker_id=...&limit=N` |
+| Consultar eventos detectados | `GET /api/eventos?worker_id=...&limit=N` |
+| Listar workers conocidos | `GET /api/workers` |
+| **Sistema externo — configurar** | |
+| Ver qué campos se pueden tocar | `GET /api/camaras/{id}/config/schema` |
+| Leer config de una cámara | `GET /api/camaras/{id}/config` |
+| Modificar config de una cámara | `POST /api/camaras/{id}/config` |
+| **Concentrador (requiere token)** | |
+| Entregar configuración | `GET /api/concentrador/config?version=N` |
 | Recibir análisis de la IA | `POST /api/concentrador/analisis` |
 | Recibir heartbeat (estado de workers) | `POST /api/concentrador/estado` |
 | Recibir config publicada localmente | `POST /api/concentrador/config` |
-| Listar workers conocidos | `GET /api/workers` |
-| Consultar análisis | `GET /api/analisis?worker_id=...&limit=N` |
-| Consultar eventos | `GET /api/eventos?worker_id=...&limit=N` |
+| **Utilidades** | |
 | Salud del servicio | `GET /api/salud` |
 
 > Esta API **no expone imagen de cámara**. Solo JSON de configuración,

@@ -23,6 +23,7 @@ distintos (¿está en uso?, leer un display, detectar una alarma...) sin tocar
 |---|---|
 | **`README.md`** (este) | Qué hace, cómo usarlo, pipeline, parámetros y calibración |
 | **[`API.md`](API.md)** | **Referencia de la API HTTP del worker**: endpoints, campos, ejemplos y SSE |
+| **[`API_NUBE.md`](API_NUBE.md)** | **Referencia completa de la API de la nube**, agrupada por quién la usa (sistema externo / concentrador) |
 | **[`ARQUITECTURA.md`](ARQUITECTURA.md)** | Diseño interno: módulos, hilos, decisiones y deudas técnicas |
 | **[`CONTRATO_NUBE.md`](CONTRATO_NUBE.md)** | **Flujo completo y contrato con los sistemas externos**: nube y Weizhou |
 | **[`INTEGRACION_WEIZHOU.md`](INTEGRACION_WEIZHOU.md)** | Documento para su equipo: qué reciben, cada cuánto y con qué contenido |
@@ -122,7 +123,7 @@ backend-nube/          ← API del sistema externo (Vercel · Node/TS + Supabase
 ├── schema.sql         ← tablas (ejecutar en Supabase)
 └── README.md          ← puesta en marcha y despliegue
 
-README.md · API.md · ARQUITECTURA.md · CONTRATO_NUBE.md · DESPLIEGUE.md · postman_collection.json
+README.md · API.md · API_NUBE.md · ARQUITECTURA.md · CONTRATO_NUBE.md · DESPLIEGUE.md · postman_collection.json
 ```
 
 ## 🚀 Inicio Rápido

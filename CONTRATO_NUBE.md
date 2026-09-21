@@ -257,11 +257,23 @@ Analiza la imagen. Responde SOLO con un JSON con esta estructura exacta:
 
 ---
 
-## 5. Endpoints (concentrador → sistema externo)
+## 5. Endpoints: el contrato en detalle
 
-Todas las peticiones **las inicia el concentrador**. Autenticación por token en
-cabecera: `Authorization: Bearer <token>` (el token vive en un archivo local, no
-en git).
+> 📖 Esta sección explica **el por qué** de cada endpoint y cómo encajan. Para
+> la **referencia completa** (todos los endpoints agrupados por quién los llama,
+> con respuestas verificadas), ver **[`API_NUBE.md`](API_NUBE.md)**.
+
+### 5.0 Quién inicia cada petición
+
+Hay **dos direcciones** en este contrato, y conviene no confundirlas:
+
+| Sección | Inicia | Autenticación | Para qué |
+|---|---|---|---|
+| §5.1 – §5.4 | **El concentrador** | `Authorization: Bearer <token>` | Subir lo que pasa en la planta y bajar config |
+| §5.5 | **El sistema externo** | *(ninguna)* | Consultar y configurar las cámaras |
+
+El sistema externo **nunca** es llamado por la nube: consulta cuando quiere
+(polling) o se suscribe a Supabase Realtime.
 
 ### 5.1 Bajar configuración
 
