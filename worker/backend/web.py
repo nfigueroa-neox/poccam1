@@ -167,6 +167,26 @@ def _resolver_ruta(ruta) -> Path:
     p = Path(ruta)
     return p if p.is_absolute() else (RAIZ / p)
 
+
+def _frame_sin_senal() -> bytes:
+    """Un frame MJPEG con un cartel de "sin señal".
+
+    Se usa mientras el worker no tiene cámara, para que el panel muestre
+    algo comprensible en vez de un video vacío o roto.
+    """
+    import numpy as _np
+    img = _np.full((360, 640, 3), 24, _np.uint8)
+    cv2.putText(img, "SIN SENAL", (150, 175),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.6, (90, 110, 130), 3, cv2.LINE_AA)
+    cv2.putText(img, "el worker funciona: esperando la camara",
+                (105, 215), cv2.FONT_HERSHEY_SIMPLEX, 0.55,
+                (120, 140, 160), 1, cv2.LINE_AA)
+    ok, jpeg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 70])
+    if not ok:
+        return b""
+    return (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" +
+            jpeg.tobytes() + b"\r\n")
+
 # Notificador de capturas nuevas: el registrador incrementa el contador
 # y el panel web avisa al navegador (SSE) solo cuando hay algo nuevo.
 _contador_capturas = 0
@@ -667,13 +687,27 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
                                else "eventos.jsonl")
 
     def generar_video():
-        """Stream MJPEG en vivo con el ROI dibujado encima."""
+        """Stream MJPEG en vivo con el ROI dibujado encima.
+
+        Si todavía no hay cámara (el worker arranca sin señal), muestra un
+        cartel en vez de dejar el stream vacío: el panel necesita algo que
+        mostrar para no parecer roto.
+        """
         while True:
             try:
+                cap = capturador
+                if monitor is not None:
+                    cap = getattr(monitor, "capturador", None)
+                if cap is None:
+                    yield _frame_sin_senal()
+                    import time
+                    time.sleep(1.0)
+                    continue
+
                 # COPIA del frame: dibujar el ROI sobre la copia, nunca
                 # sobre el frame compartido, para no contaminar lo que
                 # analiza el detector (causa de falsos positivos).
-                frame = capturador.capturar().copy()
+                frame = cap.capturar().copy()
                 # Aplicar la rotación configurada para que el panel, el
                 # ROI y la IA vean la misma orientación
                 rot = getattr(config, "rotacion", 0) if config is not None else 0

@@ -47,6 +47,14 @@ class MonitorBackend:
         # por API sin reiniciar el proceso).
         self._lock_capturador = threading.RLock()
 
+        # Motivo por el que no hay capturador (None si la cámara abrió bien).
+        self._error_capturador: str | None = None
+        self.detener = threading.Event()
+        # Se activa cuando la cámara aparece, para despertar al bucle.
+        self._evento_capturador = threading.Event()
+
+        # Puede devolver None: el worker arranca igual sin cámara, para que
+        # su API funcione y el panel no quede vacío sin explicación.
         self.capturador = self._crear_capturador()
         self.detector = DetectorCambios(
             metodo=config.metodo,
@@ -83,30 +91,61 @@ class MonitorBackend:
         self._frames_sin_avanzar = 0
         self._congelada = False
 
-    def _crear_capturador(self):
-        """Crea el capturador con reintento.
+        # Si arrancamos sin cámara, reintentar en segundo plano: así no hay
+        # que reiniciar el proceso cuando la cámara aparezca.
+        if self.capturador is None:
+            threading.Thread(target=self._bucle_captura, daemon=True).start()
 
-        Si la cámara no responde (apagada, sin red, stream no iniciado),
-        lo reintenta cada REINTENTO_SEGUNDOS en vez de terminar con un
-        traceback: así el backend queda esperando y arranca solo cuando
-        la cámara vuelve a estar disponible.
+    def _crear_capturador(self):
+        """Intenta crear el capturador UNA vez.
+
+        Si la cámara no responde devuelve None en vez de bloquear: el worker
+        debe arrancar igual, para que su API (y el panel) funcionen aunque no
+        haya imagen. Si esto esperara en un bucle, el servidor web nunca se
+        crearía y el panel quedaría en blanco sin explicación.
+
+        El bucle de reconexión vive en `_bucle_captura`, que reintenta en
+        segundo plano y engancha el capturador cuando la cámara aparece.
         """
-        while True:
+        try:
+            return crear_capturador(self.config)
+        except RuntimeError as e:
+            logger.error("❌ No se pudo abrir la fuente de imágenes: %s", e)
+            logger.warning(
+                "⚠️ El worker arranca SIN imagen: la API y el panel funcionan, "
+                "pero no habrá detecciones hasta que la cámara responda."
+            )
+            self._error_capturador = str(e)
+            return None
+
+    def _bucle_captura(self):
+        """Reintenta conectar la cámara en segundo plano.
+
+        Corre en su propio hilo para no bloquear el arranque. Cuando la
+        cámara aparece, la engancha y sale. Si nunca aparece, el worker sigue
+        vivo reportando `sin_senal`.
+        """
+        while not self.detener.is_set():
             try:
-                return crear_capturador(self.config)
+                time.sleep(REINTENTO_SEGUNDOS)
+            except KeyboardInterrupt:
+                return
+            if self.detener.is_set():
+                return
+            try:
+                nuevo = crear_capturador(self.config)
             except RuntimeError as e:
-                logger.error(
-                    "❌ No se pudo abrir la fuente de imágenes: %s", e
-                )
-                logger.info(
-                    f"🔄 Reintentando en {REINTENTO_SEGUNDOS:.0f} s... "
-                    "(Ctrl+C para salir)"
-                )
-                try:
-                    time.sleep(REINTENTO_SEGUNDOS)
-                except KeyboardInterrupt:
-                    logger.info("Abortado por el usuario.")
-                    sys.exit(1)
+                self._error_capturador = str(e)
+                logger.debug("Cámara aún no disponible: %s", e)
+                continue
+            with self._lock_capturador:
+                self.capturador = nuevo
+            self._error_capturador = None
+            logger.info("✅ Cámara conectada: el monitoreo continúa")
+            with self._lock_capturador:
+                _ = self._evento_capturador
+            self._evento_capturador.set()
+            return
 
     def cambiar_fuente(self, fuente: str, tipo_fuente: str = "camara"):
         """Cambia la cámara EN CALIENTE (sin reiniciar el proceso).
@@ -124,8 +163,8 @@ class MonitorBackend:
         self.config.fuente = tipo_fuente
         self.config.camara_fuente = str(fuente)
         try:
-            # No usar _crear_capturador (ese reintenta en bucle): aquí
-            # queremos fallar rápido y devolver el error.
+            # No usar _crear_capturador: aquí queremos fallar rápido y
+            # devolver el error al llamador (la API del panel).
             nuevo = crear_capturador(self.config)
         except RuntimeError as e:
             # Revertir la config: el capturador viejo sigue en uso
@@ -153,6 +192,10 @@ class MonitorBackend:
         preset del panel web que le corresponde (exacto o el más
         cercano). Solo aplica con fuente = cámara."""
         if self.config.fuente != "camara":
+            return
+        if self.capturador is None:
+            # Sin cámara no hay resolución que detectar; se hará cuando
+            # la cámara aparezca (el bucle de reconexión avisa).
             return
         from backend.web import buscar_preset
 
@@ -255,6 +298,15 @@ class MonitorBackend:
                 # 1. PEDIR imagen a la cámara
                 with self._lock_capturador:
                     capturador = self.capturador
+
+                # Sin cámara todavía: esperar sin girar en vacío. El worker
+                # sigue vivo (su API y el panel funcionan) y arranca el
+                # monitoreo en cuanto la cámara aparezca.
+                if capturador is None:
+                    self._evento_capturador.wait(timeout=REINTENTO_SEGUNDOS)
+                    self._evento_capturador.clear()
+                    continue
+
                 imagen = capturador.capturar()
                 self.conteo_capturas += 1
 

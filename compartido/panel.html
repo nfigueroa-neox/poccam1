@@ -235,6 +235,7 @@
           <button class="boton" id="btn-recargar" style="background:#455a64">🔄 Recargar valores</button>
           <span id="params-estado"></span>
         </div>
+        <div id="params-aviso" style="font-size:12.5px; margin-top:8px;"></div>
       </div>
     </div>
 
@@ -501,7 +502,24 @@ async function cargarParams() {
     document.getElementById('p-marcar').checked = cfg.deteccion.marcar_cambios;
     document.getElementById('p-alinear').checked = cfg.deteccion.alinear_imagenes;
     actualizarHabilitados();
-  } catch (e) { /* si falla, dejar los valores por defecto */ }
+    marcarEstadoParams('', '');
+  } catch (e) {
+    // Antes esto se silenciaba y los campos quedaban vacíos sin explicación.
+    // Ahora se dice qué pasó: casi siempre es que el worker no responde
+    // (p. ej. porque no encuentra la cámara).
+    marcarEstadoParams(
+      '⚠️ No se pudo leer la configuración. ¿Está corriendo el worker ' +
+      'y responde su cámara?', '#ffb74d');
+    console.warn('cargarParams falló:', e);
+  }
+}
+
+// Muestra un aviso bajo los parámetros (vacío = limpiar)
+function marcarEstadoParams(texto, color) {
+  const el = document.getElementById('params-aviso');
+  if (!el) return;
+  el.textContent = texto;
+  el.style.color = color || '#aaa';
 }
 
 function num(id) { return document.getElementById(id).value; }

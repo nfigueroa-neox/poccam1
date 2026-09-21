@@ -161,9 +161,11 @@ python main.py
 El concentrador deja el panel en **`http://localhost:8080`** (accesible desde
 otros equipos de la red), con un **selector** para elegir qué worker ver.
 
-> Si la cámara no responde al arrancar (apagada, sin red, stream no
-> iniciado), el worker lo avisa y **reintenta cada 5 s** hasta que
-> vuelve a estar disponible — no termina con un error. Ctrl+C para salir.
+> **Si la cámara no responde al arrancar** (apagada, sin red, stream no
+> iniciado), el worker **arranca igual**: su API y el panel funcionan, reporta
+> `salud: "sin_senal"` y **reconecta solo** cada 5 s cuando la cámara aparece.
+> Así puedes ver y editar los parámetros sin la cámara conectada. El video
+> muestra un cartel de "sin señal" en vez de quedar vacío.
 
 ### Puertos
 

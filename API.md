@@ -431,6 +431,11 @@ sola llamada. Si un worker no responde, se reporta como `worker_caido`
 | `sin_senal` | No hay ningún frame disponible | `false` |
 | `worker_caido` | El proceso del worker no responde (solo concentrador/nube) | `false` |
 
+> El worker **arranca aunque no haya cámara**: reporta `sin_senal` y reconecta
+> sola cada 5 s cuando aparece. Antes se quedaba esperando en un bucle *antes*
+> de crear su servidor web, así que el panel no tenía de dónde leer los
+> parámetros y los mostraba vacíos sin explicación.
+
 > `camara_viva: true` **no** garantiza que la cámara funcione: el capturador
 > conserva el último frame válido, así que puede estar congelado.
 
