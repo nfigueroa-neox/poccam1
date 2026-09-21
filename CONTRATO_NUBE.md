@@ -391,97 +391,46 @@ Con el mismo formato de §5.1. Sirve para que los cambios hechos desde el
 
 ### 5.5 Configurar las cámaras desde el sistema externo
 
-El sistema externo **no necesita token** para esto: son rutas de lectura y
-escritura de configuración pensadas para dashboards.
+> 📖 **Referencia completa:** [`API_NUBE.md`](API_NUBE.md) §B (con todas las
+> respuestas y los códigos de error). Aquí solo el **por qué** del diseño.
 
-El flujo es en tres pasos:
+El sistema externo **no necesita token** para esto: son rutas pensadas para
+dashboards, no para el concentrador.
 
-#### Paso 1 — Listar las cámaras (obtener los ids)
+El flujo es **listar → ver qué se puede tocar → leer y escribir**:
 
-```http
-GET /api/camaras
+```
+GET  /api/camaras                      → ids y salud de cada cámara
+GET  /api/camaras/{id}/config/schema   → qué campos son modificables
+GET  /api/camaras/{id}/config          → configuración vigente
+POST /api/camaras/{id}/config          → modificar parámetros
 ```
 
-```json
-{
-  "camaras": [
-    { "worker_id": "panel-1", "salud": "ok", "con_deteccion": true,
-      "resolucion": [1920, 1080] }
-  ],
-  "todas_ok": true,
-  "endpoints": {
-    "config":  "GET|POST /api/camaras/{camara_id}/config",
-    "esquema": "GET /api/camaras/{camara_id}/config/schema"
-  }
-}
-```
+#### Tres decisiones de diseño
 
-#### Paso 2 — Ver qué campos se pueden tocar
+**1. La escritura es una FUSIÓN, no un reemplazo.** Enviar solo
+`{"deteccion": {"blur_ksize": 9}}` cambia ese campo y **mantiene** el resto,
+bloque por bloque. Así un cliente no necesita leer antes de escribir, y no hay
+riesgo de borrar sin querer lo que otro ajustó.
 
-```http
-GET /api/camaras/panel-1/config/schema
-```
+**2. Los campos prohibidos se RECHAZAN, no se ignoran.** Si el cuerpo incluye
+`camara_fuente`, la respuesta trae `rechazados: ["captura.camara_fuente"]`. La
+alternativa (ignorarlo en silencio) haría creer al cliente que el cambio se
+aplicó.
 
-Devuelve los bloques (`deteccion`, `captura`, `ia`), el tipo de cada campo y
-—lo más importante— los campos **prohibidos**:
+| Campo | Por qué no se puede cambiar desde afuera |
+|---|---|
+| `captura.camara_fuente`, `captura.fuente` | La cámara es **hardware local** del worker |
+| `roi` | Se dibuja sobre el video en el **front local** |
+| `prompt` | Protegido con contraseña (`worker/prompt.key`) |
 
-```json
-{
-  "no_modificables": {
-    "captura.camara_fuente": "URL de la cámara: es hardware local",
-    "roi": "Se dibuja sobre el video en el front local",
-    "prompt": "Protegido con contrasena en el worker"
-  }
-}
-```
-
-#### Paso 3 — Leer y modificar
-
-```http
-GET /api/camaras/panel-1/config
-```
-
-```json
-{ "camara_id": "panel-1", "config": { "deteccion": {"min_area_px": 50} },
-  "version": 6, "actualizado": "2026-09-17T17:40:00Z" }
-```
-
-```http
-POST /api/camaras/panel-1/config
-Content-Type: application/json
-
-{ "config": { "deteccion": { "min_area_px": 120 } } }
-```
-
-```json
-{ "ok": true, "camara_id": "panel-1", "version": 7,
-  "aplicado": { "deteccion": { "min_area_px": 120 } },
-  "nota": "El concentrador bajará el cambio en su próximo ciclo..." }
-```
-
-**La escritura es una FUSIÓN, no un reemplazo.** Enviar solo
-`{"deteccion": {"blur_ksize": 9}}` cambia ese campo y **mantiene** el resto.
-Así un cliente no necesita leer antes de escribir.
-
-#### Qué NO se puede cambiar desde afuera
-
-| Campo | Por qué | Comportamiento |
-|---|---|---|
-| `captura.camara_fuente`, `captura.fuente` | La cámara es hardware local del worker | Se **rechaza** con `rechazados: [...]` |
-| `roi` | Se dibuja sobre el video en el front local | Se **rechaza** |
-| `prompt` | Protegido con contraseña en el worker | No está en la API |
-
-Si el cuerpo trae **solo** campos prohibidos, responde `400` con el detalle:
-
-```json
-{ "error": "solo se enviaron campos no modificables",
-  "rechazados": ["camara_fuente"],
-  "detalle": { "captura.camara_fuente": "URL de la cámara: es hardware local" } }
-```
+**3. El esquema se publica.** `GET .../config/schema` devuelve los bloques y el
+tipo de cada campo, para que un cliente externo no dependa de leer el código
+fuente ni de esta documentación.
 
 > ⚠️ **`captura.rotacion` es modificable pero delicado.** Cambiar el giro deja
-> el ROI dibujado apuntando a otro sitio, así que tras cambiarlo hay que
-> redibujarlo desde el front local.
+> el ROI apuntando a otro sitio: tras cambiarlo hay que redibujarlo desde el
+> front local.
 
 #### Cuánto tarda en aplicarse
 

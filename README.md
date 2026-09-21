@@ -29,11 +29,12 @@ distintos (¿está en uso?, leer un display, detectar una alarma...) sin tocar
 | **[`INTEGRACION_WEIZHOU.md`](INTEGRACION_WEIZHOU.md)** | Documento para su equipo: qué reciben, cada cuánto y con qué contenido |
 | **[`DESPLIEGUE.md`](DESPLIEGUE.md)** | Puesta en marcha en la nube, problemas conocidos y verificación |
 | **[`concentrador/README.md`](concentrador/README.md)** | El panel unificado y el proxy hacia los workers |
-| **[`backend-nube/README.md`](backend-nube/README.md)** | La API en Vercel: endpoints, tablas y despliegue |
-| **`postman_collection.json`** | Colección de Postman lista para importar (30 requests) |
+| **[`backend-nube/README.md`](backend-nube/README.md)** | La API en Vercel: qué hace, variables y despliegue |
+| **`postman_collection.json`** | Colección de Postman lista para importar (45 requests, worker + nube) |
 
 La API de configuración/estado (solo JSON) es consumible desde otro equipo de
-la red y **no expone la imagen de cámara**. Ver `API.md` para el contrato.
+la red y **no expone la imagen de cámara**. Ver `API.md` (worker) y
+`API_NUBE.md` (nube) para los contratos.
 
 ## 🔄 Flujo completo
 

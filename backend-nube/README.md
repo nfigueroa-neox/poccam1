@@ -1,14 +1,16 @@
 # Backend nube — API del sistema externo
 
-API serverless (Vercel · Node/TypeScript) que implementa el lado servidor del
-contrato con el concentrador (`CONTRATO_NUBE.md`) y persiste en **Supabase**.
+API serverless (Vercel · Node/TypeScript, en `api/index.ts`) que persiste en
+**Supabase**. Es el punto de encuentro entre el **concentrador** de la planta y
+el **sistema externo** (dashboards, tablets).
 
-> 📖 Para la puesta en marcha paso a paso, los problemas conocidos del despliegue
-> y cómo verificarlo, ver **[`../DESPLIEGUE.md`](../DESPLIEGUE.md)**.
-> 📖 Para la **referencia de todos los endpoints** (agrupados por quién los
-> llama), ver **[`../API_NUBE.md`](../API_NUBE.md)**.
+> 📖 **Referencia de todos los endpoints:** [`../API_NUBE.md`](../API_NUBE.md)
+> — agrupados por quién los llama, con las respuestas reales.
+>
+> 📖 **Puesta en marcha paso a paso** (tablas, variables, despliegue y los
+> problemas que cuestan tiempo): [`../DESPLIEGUE.md`](../DESPLIEGUE.md).
 
-## Responsabilidad
+## Qué hace
 
 | Función | Endpoint |
 |---|---|
@@ -29,30 +31,23 @@ contrato con el concentrador (`CONTRATO_NUBE.md`) y persiste en **Supabase**.
 | **Utilidades** | |
 | Salud del servicio | `GET /api/salud` |
 
-> Esta API **no expone imagen de cámara**. Solo JSON de configuración,
-> eventos y análisis.
+> Esta API **no expone imagen de cámara**. Solo JSON de configuración, eventos y
+> análisis.
 
-## Puesta en marcha
+## Archivos
 
-Resumen rápido; el detalle está en [`../DESPLIEGUE.md`](../DESPLIEGUE.md).
+| Archivo | Qué es |
+|---|---|
+| `api/index.ts` | Toda la API: enrutado, validación y acceso a Supabase |
+| `lib/supabase.ts` | Cliente de Supabase (usa la Secret key) |
+| `schema.sql` | **Fuente de verdad** del esquema de la base |
+| `migracion_salud_camaras.sql` | Migración para bases ya creadas |
+| `deploy.mjs` | Script de despliegue (ver nota abajo) |
+| `vercel.json` | Rewrites: todo `/api/*` va a `api/index` |
 
-### 1. Crear las tablas en Supabase
+## Variables de entorno
 
-En **Supabase → SQL Editor**, ejecutar el contenido de `schema.sql`.
-
-Luego, **otorgar permisos al rol del backend** (obligatorio; sin esto la API
-responde `permission denied for table ...`):
-
-```sql
-GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
-GRANT ALL ON SCHEMA public TO service_role;
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
-```
-
-### 2. Variables de entorno
-
-Copiar `.env.example` a `.env` y completar:
+Se configuran en **Vercel → Project → Settings → Environment Variables**:
 
 | Variable | De dónde sale |
 |---|---|
@@ -60,26 +55,10 @@ Copiar `.env.example` a `.env` y completar:
 | `SUPABASE_SERVICE_KEY` | Supabase → Settings → API Keys → **Secret key** (`sb_secret_...`) |
 | `CONCENTRADOR_TOKEN` | Lo generás vos (largo y aleatorio) |
 
-### 3. Desarrollo local
+La `SERVICE_KEY` **nunca sale del servidor**: salta RLS y no debe usarse en un
+cliente. Las rutas del sistema externo no dependen de ella.
 
-```bash
-npm install
-npx vercel dev          # levanta en http://localhost:3000
-```
-
-### 4. Despliegue en Vercel
-
-```bash
-npx vercel --prod
-```
-
-O desde el dashboard de Vercel: importar el repo y **configurar el
-"Root Directory" como `backend-nube`**.
-
-Las variables de entorno se configuran en
-**Vercel → Project → Settings → Environment Variables** (los mismos 3 valores).
-
-### 5. Conectar el concentrador
+## Conectar el concentrador
 
 En `concentrador/config.yaml`:
 
@@ -91,31 +70,31 @@ nube:
   concentrador_id: "planta-1"
 ```
 
-## Probar rápido
+## Desplegar
+
+> ⚠️ **El proyecto tiene `Root Directory = backend-nube` en Vercel**, porque en
+> su momento se desplegó desde la raíz del monorepo. Eso significa que el CLI
+> debe ejecutarse **desde la raíz**, no desde esta carpeta (si no, busca
+> `backend-nube/backend-nube` y falla). `deploy.mjs` ya lo hace así:
 
 ```bash
-# Salud
-curl https://tu-proyecto.vercel.app/api/salud
-
-# Config (con token)
-curl -H "Authorization: Bearer TU_TOKEN" \
-  "https://tu-proyecto.vercel.app/api/concentrador/config?version=-1"
-
-# Análisis recibidos
-curl "https://tu-proyecto.vercel.app/api/analisis?limit=10"
+cd backend-nube
+node deploy.mjs deploy     # despliega a producción
+node deploy.mjs whoami     # verifica la sesión
 ```
+
+El token de Vercel se lee de `.vercel-token` (gitignored).
 
 ## Notas de arquitectura
 
-- **Runtime Node.js (no Edge)**: el handler es `(req, res)` de `@vercel/node` y se
-  adapta internamente a la interfaz tipo Fetch. Con `runtime: 'edge'` las
-  variables de entorno se comportaban de forma inconsistente (el token aparecía
-  vacío en runtime).
+- **Runtime Node.js (no Edge)**: el handler es `(req, res)` de `@vercel/node`.
+  Con `runtime: 'edge'` las variables de entorno se comportaban de forma
+  inconsistente (el token aparecía vacío en runtime).
 - **Serverless**: no hay proceso permanente ni filesystem. Toda la persistencia
   es en Supabase.
 - **`datos` es JSONB**: el JSON libre que devuelve la IA se guarda tal cual, así
   el esquema puede cambiar sin migrar la base.
-- **Auth por token**: el concentrador se autentica con `Bearer`. La
-  `service_role` key nunca sale del servidor.
-- **Idempotencia**: `analisis.evento_id` es `UNIQUE` — si el concentrador
-  reintenta un envío (cola offline), no se duplica.
+- **Idempotencia**: `analisis.evento_id` y `eventos.evento_id` son `UNIQUE` — si
+  el concentrador reintenta un envío (cola offline), no se duplica.
+- **Config por fusión**: `POST /api/camaras/{id}/config` fusiona bloque por
+  bloque, para que un cliente cambie un parámetro sin reenviar todo.

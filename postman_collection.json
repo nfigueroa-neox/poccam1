@@ -9,6 +9,16 @@
       "key": "base_url",
       "value": "http://127.0.0.1:5000",
       "type": "string"
+    },
+    {
+      "key": "nube_url",
+      "value": "https://backend-nube.vercel.app",
+      "type": "string"
+    },
+    {
+      "key": "concentrador_token",
+      "value": "PEGAR_EL_CONCENTRADOR_TOKEN",
+      "type": "string"
     }
   ],
   "item": [
@@ -23,8 +33,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/config",
-              "host": ["{{base_url}}"],
-              "path": ["api", "config"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "config"
+              ]
             },
             "description": "Devuelve TODOS los parámetros actuales (captura, detección, web, registro, IA) + `presets` por resolución + `camara_resolucion` y `preset_aplicado`."
           }
@@ -36,8 +51,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/estado-sistema",
-              "host": ["{{base_url}}"],
-              "path": ["api", "estado-sistema"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "estado-sistema"
+              ]
             },
             "description": "Estado actual completo: `config` + `runtime` (camara_viva, camara_resolucion, preset_aplicado, rotacion_efectiva, roi, ia_activa, capturas, cambios). Solo lectura."
           }
@@ -58,8 +78,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/config",
-              "host": ["{{base_url}}"],
-              "path": ["api", "config"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "config"
+              ]
             },
             "description": "Sobrescribe parámetros de DETECCIÓN en vivo (parcial: solo los campos enviados). Se persiste en config.yaml."
           }
@@ -80,8 +105,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/config",
-              "host": ["{{base_url}}"],
-              "path": ["api", "config"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "config"
+              ]
             },
             "description": "Sobrescribe parámetros de CAPTURA en vivo: `intervalo_segundos`, `rotacion` (0/90/180/270), `reconectar_segundos`, `nombre_camara`."
           }
@@ -102,8 +132,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/config",
-              "host": ["{{base_url}}"],
-              "path": ["api", "config"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "config"
+              ]
             },
             "description": "Cambia la cámara y recrea el capturador AL INSTANTE (sin reiniciar el proceso).\n\n- Éxito: `{\"ok\": true}`\n- Si la cámara nueva no abre: `502` y **se mantiene la cámara anterior** funcionando.\n- Formatos válidos de `camara_fuente`: URL HTTP/MJPEG (`http://IP:8080/video`), RTSP (`rtsp://IP:554/...`), índice USB (`0`)."
           }
@@ -124,8 +159,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/rotacion",
-              "host": ["{{base_url}}"],
-              "path": ["api", "rotacion"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "rotacion"
+              ]
             },
             "description": "Fija la rotación de la imagen: 0, 90, 180 o 270 (sentido horario). Aplica en vivo y persiste."
           }
@@ -137,8 +177,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/config",
-              "host": ["{{base_url}}"],
-              "path": ["api", "config"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "config"
+              ]
             },
             "description": "La rotación actual está en `captura.rotacion` de este endpoint (no existe GET /api/rotacion; esa ruta es solo POST)."
           }
@@ -159,8 +204,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/config",
-              "host": ["{{base_url}}"],
-              "path": ["api", "config"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "config"
+              ]
             },
             "description": "Valores de partida para 640x480 (para volver rápido a una config conocida)."
           }
@@ -178,8 +228,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/roi",
-              "host": ["{{base_url}}"],
-              "path": ["api", "roi"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "roi"
+              ]
             },
             "description": "`{\"region\": [left, top, width, height]}` o `{\"region\": null}` si no hay área definida."
           }
@@ -200,8 +255,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/roi",
-              "host": ["{{base_url}}"],
-              "path": ["api", "roi"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "roi"
+              ]
             },
             "description": "Define el rectángulo de análisis en píxeles de la imagen (considerando la rotación aplicada). Formato: `[left, top, width, height]`."
           }
@@ -213,8 +273,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/roi",
-              "host": ["{{base_url}}"],
-              "path": ["api", "roi"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "roi"
+              ]
             },
             "description": "Borra el área de análisis (vuelve a analizar todo el frame)."
           }
@@ -232,8 +297,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/ia",
-              "host": ["{{base_url}}"],
-              "path": ["api", "ia"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ia"
+              ]
             },
             "description": "`{\"enabled\": bool, \"model\": \"...\", \"detail\": \"...\"}`"
           }
@@ -254,8 +324,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/ia",
-              "host": ["{{base_url}}"],
-              "path": ["api", "ia"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ia"
+              ]
             },
             "description": "Activa el análisis IA en la sesión actual (no persiste: al reiniciar vuelve a estar detenido)."
           }
@@ -276,8 +351,13 @@
             },
             "url": {
               "raw": "{{base_url}}/api/ia",
-              "host": ["{{base_url}}"],
-              "path": ["api", "ia"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ia"
+              ]
             },
             "description": "Detiene el análisis IA en la sesión actual."
           }
@@ -289,8 +369,14 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/ia/prompt",
-              "host": ["{{base_url}}"],
-              "path": ["api", "ia", "prompt"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ia",
+                "prompt"
+              ]
             },
             "description": "Devuelve el prompt (system) actual que se envía a la IA. Define la estructura del JSON de respuesta."
           }
@@ -311,8 +397,14 @@
             },
             "url": {
               "raw": "{{base_url}}/api/ia/prompt",
-              "host": ["{{base_url}}"],
-              "path": ["api", "ia", "prompt"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ia",
+                "prompt"
+              ]
             },
             "description": "Guarda el prompt en vivo (afecta al próximo análisis). NOTA: el backend NO impone estructura; la defines vos en este prompt. Se guarda en `ia_prompt.txt`."
           }
@@ -324,8 +416,14 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/ia/prompts-hist",
-              "host": ["{{base_url}}"],
-              "path": ["api", "ia", "prompts-hist"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ia",
+                "prompts-hist"
+              ]
             },
             "description": "Historial de prompts guardados (máx 10), más reciente primero."
           }
@@ -346,8 +444,14 @@
             },
             "url": {
               "raw": "{{base_url}}/api/ia/prompts-hist",
-              "host": ["{{base_url}}"],
-              "path": ["api", "ia", "prompts-hist"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ia",
+                "prompts-hist"
+              ]
             },
             "description": "Agrega un prompt al historial (sin duplicados, máx 10)."
           }
@@ -368,8 +472,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/ia/prompts-hist/delete",
-              "host": ["{{base_url}}"],
-              "path": ["api", "ia", "prompts-hist", "delete"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ia",
+                "prompts-hist",
+                "delete"
+              ]
             },
             "description": "Elimina un prompt del historial por su contenido exacto."
           }
@@ -387,8 +498,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/ultimas",
-              "host": ["{{base_url}}"],
-              "path": ["api", "ultimas"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "ultimas"
+              ]
             },
             "description": "Las 2 imágenes de eventos más recientes: `{archivo, url, fecha}`."
           }
@@ -400,8 +516,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/log",
-              "host": ["{{base_url}}"],
-              "path": ["api", "log"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "log"
+              ]
             },
             "description": "Últimos eventos detectados con área de píxeles, score y sugerencia de ajuste de parámetros. `min_area_px` es el valor EN VIVO."
           }
@@ -413,8 +534,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/log",
-              "host": ["{{base_url}}"],
-              "path": ["api", "log"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "log"
+              ]
             },
             "description": "Vacía `eventos.jsonl` (el archivo en disco)."
           }
@@ -426,8 +552,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/api/analisis",
-              "host": ["{{base_url}}"],
-              "path": ["api", "analisis"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "analisis"
+              ]
             },
             "description": "Últimos análisis JSON de la IA (máx 10), con su timestamp y el contenido que devolvió el modelo."
           }
@@ -450,8 +581,13 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/eventos",
-              "host": ["{{base_url}}"],
-              "path": ["api", "eventos"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "eventos"
+              ]
             },
             "description": "Empuja `data: <contador>` cada vez que se registra una captura nueva."
           }
@@ -468,8 +604,13 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/config-eventos",
-              "host": ["{{base_url}}"],
-              "path": ["api", "config-eventos"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "config-eventos"
+              ]
             },
             "description": "Empuja un aviso cada vez que la configuración cambia (desde el panel o desde la API). Es el mecanismo de sincronización para clientes externos."
           }
@@ -486,8 +627,13 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/estado",
-              "host": ["{{base_url}}"],
-              "path": ["api", "estado"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "estado"
+              ]
             },
             "description": "Empuja cada ~1 s: `{alinear, dy, dx, activo, margen, area_interior, area_borde}` (compensación de vibración)."
           }
@@ -504,8 +650,13 @@
             ],
             "url": {
               "raw": "{{base_url}}/api/eventos-analisis",
-              "host": ["{{base_url}}"],
-              "path": ["api", "eventos-analisis"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "eventos-analisis"
+              ]
             },
             "description": "Empuja un aviso cuando hay un análisis IA nuevo guardado."
           }
@@ -523,8 +674,12 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/",
-              "host": ["{{base_url}}"],
-              "path": [""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                ""
+              ]
             },
             "description": "Página del panel (video en vivo, ROI, parámetros, IA)."
           }
@@ -536,8 +691,12 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/video",
-              "host": ["{{base_url}}"],
-              "path": ["video"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "video"
+              ]
             },
             "description": "Stream MJPEG en vivo con el ROI dibujado. Uso interno del panel; NO exponer como API."
           }
@@ -549,11 +708,479 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/capturas/evento_20260803_120000_000_original.png",
-              "host": ["{{base_url}}"],
-              "path": ["capturas", "evento_20260803_120000_000_original.png"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "capturas",
+                "evento_20260803_120000_000_original.png"
+              ]
             },
             "description": "Sirve el PNG de un evento. Uso interno del panel; NO exponer como API."
           }
+        }
+      ]
+    },
+    {
+      "name": "7. NUBE · Consultar (sistema externo)",
+      "description": "Rutas de LECTURA de la API en la nube. NO requieren token.\n\nPunto de partida: listar las cámaras para obtener sus ids.\n\nVer API_NUBE.md §A para el detalle completo.",
+      "item": [
+        {
+          "name": "Listar cámaras (con salud)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nube_url}}/api/camaras",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "camaras"
+              ]
+            },
+            "description": "Devuelve las cámaras con su id y su salud.\n\nFiltro opcional: ?estado=ok  |  ?estado=alerta\n\ncamara_viva:true NO garantiza que funcione (el capturador conserva\nel último frame). Para detección real, salud == \"ok\"."
+          },
+          "response": []
+        },
+        {
+          "name": "Cámaras con problemas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nube_url}}/api/camaras",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "camaras"
+              ],
+              "query": [
+                {
+                  "key": "estado",
+                  "value": "alerta"
+                }
+              ]
+            },
+            "description": "Atajo: solo las cámaras que NO están ok.\n\nsalud ∈ {congelada, sin_senal, worker_caido}"
+          },
+          "response": []
+        },
+        {
+          "name": "Consultar análisis de la IA",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nube_url}}/api/analisis",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "analisis"
+              ],
+              "query": [
+                {
+                  "key": "worker_id",
+                  "value": "panel-1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "El JSON que produjo la IA, guardado tal cual.\n\n`datos` es OPACO: su contenido lo define el prompt de cada worker y\npuede cambiar sin aviso. Iterar sus claves, no asumir campos fijos."
+          },
+          "response": []
+        },
+        {
+          "name": "Consultar eventos detectados",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nube_url}}/api/eventos",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "eventos"
+              ],
+              "query": [
+                {
+                  "key": "worker_id",
+                  "value": "panel-1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Los cambios de imagen que dispararon el análisis (antes de la IA).\n\nÚtil para diagnosticar sensibilidad (score, area_px) sin gastar\nen análisis de IA."
+          },
+          "response": []
+        },
+        {
+          "name": "Listar workers registrados",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nube_url}}/api/workers",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "workers"
+              ]
+            },
+            "description": "Lista simple de cámaras conocidas (se registran solas al mandar su\nprimer análisis). Para salud, usar /api/camaras."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "8. NUBE · Configurar cámaras (sistema externo)",
+      "description": "Flujo: listar cámaras (carpeta 7) → ver qué se puede tocar → leer y escribir.\n\nLa escritura es una FUSIÓN: enviar solo un parámetro mantiene el resto.\nLos campos prohibidos (URL de cámara, ROI) se RECHAZAN explícitamente.\n\nVer API_NUBE.md §B para el detalle completo.",
+      "item": [
+        {
+          "name": "Ver qué campos se pueden modificar",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nube_url}}/api/camaras/panel-1/config/schema",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "camaras",
+                "panel-1",
+                "config",
+                "schema"
+              ]
+            },
+            "description": "Publica el contrato: bloques (deteccion, captura, ia), el tipo de cada\ncampo y la lista de campos NO modificables desde afuera.\n\nAsí un cliente externo no depende de leer el código fuente."
+          },
+          "response": []
+        },
+        {
+          "name": "Leer config de una cámara",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nube_url}}/api/camaras/panel-1/config",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "camaras",
+                "panel-1",
+                "config"
+              ]
+            },
+            "description": "Config vigente + version + fecha de actualización.\n\nSi nunca se configuró: config vacío y version 0 (el worker usa sus\nvalores locales)."
+          },
+          "response": []
+        },
+        {
+          "name": "Modificar parámetros de una cámara",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{nube_url}}/api/camaras/panel-1/config",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "camaras",
+                "panel-1",
+                "config"
+              ]
+            },
+            "description": "FUSIÓN: esto cambia solo min_area_px; el resto se mantiene.\n\nEl concentrador baja el cambio en su próximo ciclo (polling) y el\nworker lo aplica en caliente, sin reiniciar.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": {\n    \"deteccion\": {\n      \"min_area_px\": 120\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Probar rechazo de campo prohibido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{nube_url}}/api/camaras/panel-1/config",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "camaras",
+                "panel-1",
+                "config"
+              ]
+            },
+            "description": "Debe responder 400 con rechazados: [\"captura.camara_fuente\"].\n\nLa URL de la cámara es hardware local: se rechaza en vez de ignorarse\nen silencio, para que el cliente sepa que no tuvo efecto.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": {\n    \"captura\": {\n      \"camara_fuente\": \"rtsp://no-permitido\"\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Probar cámara inexistente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{nube_url}}/api/camaras/no-existe/config",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "camaras",
+                "no-existe",
+                "config"
+              ]
+            },
+            "description": "Debe responder 404 con una sugerencia de consultar GET /api/camaras.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config\": {\n    \"deteccion\": {\n      \"min_area_px\": 1\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "9. NUBE · Concentrador (requiere token)",
+      "description": "Rutas que usa el CONCENTRADOR de la planta.\n\nExigen `Authorization: Bearer <CONCENTRADOR_TOKEN>`; sin la cabecera\nresponden 401. Configurar `concentrador_token` en las variables.\n\nVer API_NUBE.md §C para el detalle completo.",
+      "item": [
+        {
+          "name": "Bajar configuración (?version=N)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{concentrador_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{nube_url}}/api/concentrador/config",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "concentrador",
+                "config"
+              ],
+              "query": [
+                {
+                  "key": "version",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Devuelve 304 SIN CUERPO si la version no cambió (ahorro de ancho de banda).\n\nLa version global es la SUMA de las versiones por worker.\nEn el primer arranque, usar version=-1 o 0."
+          },
+          "response": []
+        },
+        {
+          "name": "Reportar estado (heartbeat)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{concentrador_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{nube_url}}/api/concentrador/estado",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "concentrador",
+                "estado"
+              ]
+            },
+            "description": "Permite que el dashboard remoto muestre el estado aunque el\nconcentrador no sea alcanzable.\n\nPersiste en `heartbeats` y actualiza workers.camara_salud.\n`alertas` es un atajo pre-filtrado con las cámaras que NO están ok.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"concentrador_id\": \"concentrador-1\",\n  \"timestamp\": \"2026-09-17T17:22:31+00:00\",\n  \"workers\": {\n    \"panel-1\": {\n      \"camara_viva\": true,\n      \"camara_salud\": \"ok\",\n      \"camara_motivo\": \"\",\n      \"resolucion\": [\n        1920,\n        1080\n      ],\n      \"ia_activa\": true,\n      \"capturas\": 3867,\n      \"eventos\": 35\n    }\n  },\n  \"alertas\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Subir análisis de la IA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{concentrador_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{nube_url}}/api/concentrador/analisis",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "concentrador",
+                "analisis"
+              ]
+            },
+            "description": "Idempotente: `evento_id` es UNIQUE, así que un reintento desde la cola\noffline no duplica.\n\nAuto-registra el worker si es la primera vez que aparece.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"worker_id\": \"panel-1\",\n  \"evento_id\": \"20260917_134335_121\",\n  \"timestamp\": \"2026-09-17T13:43:35-03:00\",\n  \"esquema\": \"estado_equipo_v1\",\n  \"datos\": {\n    \"en_uso\": true,\n    \"confianza\": 0.88,\n    \"notas\": \"ciclo activo\"\n  },\n  \"meta\": {\n    \"modelo\": \"deepseek-v4-flash-vision-exp\",\n    \"detail\": \"low\",\n    \"latencia_ms\": 1840,\n    \"area_px\": 102477,\n    \"score\": 0.1258\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Publicar config local",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{concentrador_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{nube_url}}/api/concentrador/config",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "concentrador",
+                "config"
+              ]
+            },
+            "description": "Para que los cambios hechos desde el FRONT LOCAL queden registrados en\nla nube (fuente de verdad).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workers\": {\n    \"panel-1\": {\n      \"deteccion\": {\n        \"min_area_px\": 120\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Salud del servicio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{nube_url}}/api/salud",
+              "host": [
+                "{{nube_url}}"
+              ],
+              "path": [
+                "api",
+                "salud"
+              ]
+            },
+            "description": "Health check de la API en la nube. No requiere token."
+          },
+          "response": []
         }
       ]
     }

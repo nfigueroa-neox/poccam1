@@ -405,7 +405,7 @@ sola llamada. Si un worker no responde, se reporta como `worker_caido`
 | `?estado=ok` | Solo las que están bien |
 | `?estado=alerta` | Solo las que tienen problemas |
 
-### Valores de `camara_salud` / `salud`
+### Valores de `camara_salud`
 
 | Valor | Significado | `con_deteccion` |
 |---|---|---|
@@ -414,9 +414,15 @@ sola llamada. Si un worker no responde, se reporta como `worker_caido`
 | `sin_senal` | No hay ningún frame disponible | `false` |
 | `worker_caido` | El proceso del worker no responde (solo concentrador/nube) | `false` |
 
+> `camara_viva: true` **no** garantiza que la cámara funcione: el capturador
+> conserva el último frame válido, así que puede estar congelado.
+
 > **Responden `200` siempre**, incluso con la cámara mala: es un informe, no un
 error HTTP. Así un cliente distingue "la cámara está mal" de "la API no
 responde". El veredicto está en el campo `salud`.
+
+> 📖 La salud desde la **nube** (`GET /api/camaras`) está en
+> [`API_NUBE.md`](API_NUBE.md) §A.1.
 
 ---
 

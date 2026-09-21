@@ -249,9 +249,11 @@ Todos ignorados por git (ver `.gitignore`).
    lanza el análisis en un hilo aparte cuando hay cambio y `ia.enabled` está
    activo (ver `backend/ia.py` y la sección `ia:` del YAML). El esquema de
    salida lo define el prompt (`worker/ia_prompt.txt`).
-2. **Verificación anti-oculsión** (pendiente de implementar): al confirmar un
-   cambio, esperar ~1 s y recapturar; comparar el estado estabilizado contra la
-   referencia anterior para descartar "algo que se cruzó".
+2. **Verificación anti-oculsión** (**evaluada y descartada**): se implementó y
+   se eliminó, porque solo reportaba en el log sin descartar el análisis, así
+   que no daba el ahorro buscado. Si se reañade, la vía barata es una heurística
+   sobre el área del cambio (el detector ya la calcula): marcar los cambios que
+   cubren casi todo el ROI. Ver la nota en `README.md` §Camino a producción.
 3. **API externa**: ~~pendiente~~ **implementada**. El worker expone su API JSON
    (`backend/web.py`) y el concentrador la agrega para los sistemas externos
    (ver `CONTRATO_NUBE.md`).
