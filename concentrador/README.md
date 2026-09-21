@@ -22,7 +22,7 @@ un selector para elegir qué cámara ver.
 | `backend/clientes.py` | Habla con los workers (API + SSE) |
 | `backend/nube.py` | Habla con el backend externo (contrato) |
 | `backend/cola.py` | Cola offline de pendientes |
-| `backend/panel.py` | **Panel unificado**: sirve el HTML y hace proxy al worker activo |
+| `backend/panel.py` | **Panel unificado**: sirve el HTML, la página `/api` y hace proxy al worker activo |
 | `config.yaml` | Lista de workers + panel + datos de la nube |
 
 ## Panel web unificado
@@ -44,8 +44,22 @@ NAVEGADOR ──▶ CONCENTRADOR :8080 ──▶ WORKER activo :5000
 
 | Ruta | Qué hace |
 |---|---|
+| `GET /api` | **Página de documentación navegable** (ver abajo) |
 | `GET /api/workers-panel` | Lista los workers y cuál está activo |
 | `POST /api/worker-activo` | Cambia el worker activo (`{"id": "panel-1"}`) |
+| `GET /api/salud-camaras` | Salud de **todas** las cámaras en una llamada |
+
+### Página de documentación: `GET /api`
+
+Abrir `http://localhost:8080/api` muestra una página con las rutas de este
+concentrador y, **en vivo**, las del worker activo (las descubre pidiendo su
+propio `/api`).
+
+Vive en `/api` y no en `/` porque la raíz sirve el panel de la cámara. Si el
+worker está caído, la página lo indica en lugar de fallar.
+
+> Para que la sección del worker aparezca, el worker debe exponer su índice en
+> `GET /api` (lo hace `worker/backend/web.py`).
 
 ### Detalles del proxy que conviene conocer
 

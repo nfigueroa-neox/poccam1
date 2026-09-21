@@ -352,7 +352,7 @@ de configuración no incluye el prompt (ver `CONTRATO_NUBE.md`).
 
 ---
 
-## 5.1 Salud de la cámara
+### 5.1 Salud de la cámara
 
 Permite saber si la cámara está funcionando **sin** traer toda la
 configuración. Pensado para monitoreo externo y para que el concentrador
@@ -423,6 +423,51 @@ responde". El veredicto está en el campo `salud`.
 
 > 📖 La salud desde la **nube** (`GET /api/camaras`) está en
 > [`API_NUBE.md`](API_NUBE.md) §A.1.
+
+---
+
+### 5.2 Índice de la API (`GET /api`)
+
+El worker publica un **índice de sus propias rutas**, con descripción:
+
+```http
+GET /api
+```
+
+```json
+{
+  "servicio": "worker de deteccion de cambios",
+  "worker_id": "panel-1",
+  "grupos": [
+    { "titulo": "Configuración y área de análisis",
+      "rutas": [
+        { "metodo": "GET", "ruta": "/api/config",
+          "descripcion": "Parámetros del detector" }
+      ] }
+  ]
+}
+```
+
+Sirve para dos cosas:
+
+1. **Descubrimiento**: un cliente sabe qué hay sin leer el código.
+2. **Documentación viva**: la página del concentrador pide este índice y
+   muestra las rutas **en vivo**, en vez de mantener una lista que se
+   desactualice.
+
+### Páginas de documentación navegable
+
+Las dos APIs tienen una página HTML que se puede abrir en el navegador:
+
+| URL | Qué muestra |
+|---|---|
+| `http://localhost:8080/api` | Rutas del concentrador **+ las del worker activo** (en vivo) |
+| `http://localhost:5000/api` | Índice JSON del worker |
+| `https://backend-nube.vercel.app` | Rutas de la API en la nube |
+
+> En el concentrador la página vive en `/api`, **no** en `/`: la raíz sirve el
+> panel de la cámara. Si el worker está caído, la página lo indica en vez de
+> fallar.
 
 ---
 

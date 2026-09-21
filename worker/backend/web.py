@@ -28,6 +28,85 @@ from pathlib import Path
 
 logger = logging.getLogger("backend")
 
+# Índice de la API, en un solo lugar. Se publica en `GET /api` y lo consume
+# la página de documentación del concentrador, para no mantener una copia
+# aparte que se desactualice.
+_GRUPOS_API = [
+    {
+        "titulo": "Configuración y área de análisis",
+        "rutas": [
+            {"metodo": "GET", "ruta": "/api/config",
+             "descripcion": "Parámetros del detector"},
+            {"metodo": "POST", "ruta": "/api/config",
+             "descripcion": "Aplicar parámetros en vivo (panel local)"},
+            {"metodo": "POST", "ruta": "/api/externo/config",
+             "descripcion": "Aplicar parámetros desde el concentrador"},
+            {"metodo": "POST", "ruta": "/api/rotacion",
+             "descripcion": "Rotar la imagen (0/90/180/270)"},
+            {"metodo": "GET", "ruta": "/api/roi",
+             "descripcion": "Área de análisis"},
+            {"metodo": "POST", "ruta": "/api/roi",
+             "descripcion": "Definir el área de análisis"},
+            {"metodo": "DELETE", "ruta": "/api/roi",
+             "descripcion": "Quitar el área de análisis"},
+        ],
+    },
+    {
+        "titulo": "Estado y salud",
+        "rutas": [
+            {"metodo": "GET", "ruta": "/api/salud",
+             "descripcion": "Salud de la cámara (ligero)"},
+            {"metodo": "GET", "ruta": "/api/estado-sistema",
+             "descripcion": "Config + runtime completo"},
+        ],
+    },
+    {
+        "titulo": "Análisis con IA",
+        "rutas": [
+            {"metodo": "GET", "ruta": "/api/ia",
+             "descripcion": "Estado del análisis (activado/modelo)"},
+            {"metodo": "POST", "ruta": "/api/ia",
+             "descripcion": "Activar o detener el análisis"},
+            {"metodo": "GET", "ruta": "/api/analisis",
+             "descripcion": "Últimos análisis"},
+            {"metodo": "GET", "ruta": "/api/ia/prompt",
+             "descripcion": "Prompt actual (requiere contraseña)"},
+            {"metodo": "POST", "ruta": "/api/ia/prompt",
+             "descripcion": "Guardar el prompt (requiere contraseña)"},
+            {"metodo": "GET", "ruta": "/api/ia/prompts-hist",
+             "descripcion": "Historial de prompts (requiere contraseña)"},
+        ],
+    },
+    {
+        "titulo": "Datos y resultados",
+        "rutas": [
+            {"metodo": "GET", "ruta": "/api/eventos",
+             "descripcion": "Eventos (JSON Lines)"},
+            {"metodo": "GET", "ruta": "/api/log",
+             "descripcion": "Log de cambios + sugerencia de ajuste"},
+            {"metodo": "DELETE", "ruta": "/api/log",
+             "descripcion": "Vaciar el log"},
+            {"metodo": "GET", "ruta": "/api/ultimas",
+             "descripcion": "Las 2 capturas más recientes"},
+            {"metodo": "GET", "ruta": "/capturas/<nombre>",
+             "descripcion": "Imagen de un evento"},
+        ],
+    },
+    {
+        "titulo": "En vivo (SSE)",
+        "rutas": [
+            {"metodo": "GET", "ruta": "/api/eventos-analisis",
+             "descripcion": "Avisa cuando hay un análisis nuevo"},
+            {"metodo": "GET", "ruta": "/api/config-eventos",
+             "descripcion": "Avisa cuando cambia la configuración"},
+            {"metodo": "GET", "ruta": "/api/estado",
+             "descripcion": "Desplazamiento por compensación de vibración"},
+            {"metodo": "GET", "ruta": "/video",
+             "descripcion": "Stream MJPEG en vivo"},
+        ],
+    },
+]
+
 import cv2
 from flask import Flask, Response, jsonify, request, send_file
 
@@ -505,7 +584,21 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
             "worker_id": (getattr(config, "worker_id_efectivo", None)
                           and config.worker_id_efectivo()),
             "panel": "El panel se sirve desde el concentrador",
-            "api": "/api/estado-sistema",
+            "api": "/api",
+        })
+
+    @app.route("/api")
+    def api_indice():
+        """Índice de la API del worker: qué rutas existen y para qué sirven.
+
+        Lo consume la página `/api` del concentrador para listar las rutas del
+        worker **en vivo**, en vez de mantener una copia que se desactualice.
+        """
+        return jsonify({
+            "servicio": "worker de deteccion de cambios",
+            "worker_id": (getattr(config, "worker_id_efectivo", None)
+                          and config.worker_id_efectivo()),
+            "grupos": _GRUPOS_API,
         })
 
     @app.route("/video")

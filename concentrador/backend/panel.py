@@ -49,6 +49,151 @@ def leer_panel() -> str:
                 f"<p>Se esperaba en: {RUTA_PANEL}</p>")
 
 
+def pagina_api(workers: dict, worker_activo: str | None) -> Response:
+    """Página navegable con las rutas de la API del concentrador.
+
+    Vive en `/api` (no en `/`, que sirve el panel de la cámara) para que
+    quien llegue buscando la API encuentre algo mejor que un 404.
+
+    Las rutas del worker se obtienen de su propio `/api` cuando se puede
+    consultar, así que la lista refleja lo que hay de verdad y no una copia
+    que se queda desactualizada.
+    """
+    import html as _html
+
+    base = f"http://{request.host}"
+
+    propias = [
+        ("GET", "/api", "Esta página"),
+        ("GET", "/api/workers-panel", "Workers configurados y cuál está activo"),
+        ("POST", "/api/worker-activo", "Cambiar el worker activo"),
+        ("GET", "/api/salud-camaras", "Salud de TODAS las cámaras"),
+        ("GET", "/", "El panel web (video + ROI + parámetros)"),
+        ("GET", "/video", "Stream de video, reenviado al worker activo"),
+    ]
+
+    # Rutas del worker: se piden a su propio /api si está alcanzable
+    del_worker: list = []
+    error_worker = ""
+    worker = workers.get(worker_activo) if worker_activo else None
+    if worker is None and workers:
+        worker = next(iter(workers.values()))
+    if worker is not None:
+        try:
+            datos = worker._get("/api", timeout=5)
+            if isinstance(datos, dict):
+                for grupo in datos.get("grupos", []):
+                    for r in grupo.get("rutas", []):
+                        del_worker.append((grupo.get("titulo", ""), r))
+        except Exception as e:  # noqa: BLE001 — la página se muestra igual
+            error_worker = str(e)
+
+    def fila(metodo: str, ruta: str, desc: str, activo=True) -> str:
+        ruta_esc = _html.escape(ruta)
+        metodo_esc = _html.escape(metodo)
+        desc_esc = _html.escape(desc)
+        cls = metodo.lower()
+        if activo and metodo == "GET" and not ruta.startswith("/video"):
+            cuerpo = (f'<a href="{ruta_esc}"><span class="metodo {cls}">'
+                      f'{metodo_esc}</span><code>{ruta_esc}</code></a>')
+        else:
+            cuerpo = (f'<span class="metodo {cls}">{metodo_esc}</span>'
+                      f'<code>{ruta_esc}</code>')
+        return f'<li>{cuerpo}<span class="desc">{desc_esc}</span></li>'
+
+    secciones = [
+        '<section><h2>API del concentrador</h2>'
+        '<p class="nota">Rutas propias de este proceso, en '
+        f'{_html.escape(base)}.</p><ul>'
+        + "".join(fila(*r) for r in propias)
+        + "</ul></section>",
+    ]
+
+    if del_worker:
+        por_grupo: dict = {}
+        for titulo, r in del_worker:
+            por_grupo.setdefault(titulo, []).append(r)
+        for titulo, rutas in por_grupo.items():
+            secciones.append(
+                f'<section><h2>{_html.escape(titulo)}</h2>'
+                '<p class="nota">Reenviadas al worker activo '
+                f'(<code>{_html.escape(worker_activo or "")}</code>) '
+                'a través del proxy.</p><ul>'
+                + "".join(
+                    fila(r.get("metodo", "GET"), r.get("ruta", ""),
+                         r.get("descripcion", ""))
+                    for r in rutas)
+                + "</ul></section>")
+    else:
+        motivo = _html.escape(error_worker) if error_worker else "sin worker activo"
+        secciones.append(
+            '<section><h2>API del worker</h2>'
+            f'<p class="nota">No disponible ({motivo}).</p></section>')
+
+    html_doc = _PLANTILLA_API.replace("{{SECCIONES}}", "".join(secciones))
+    return Response(html_doc, mimetype="text/html")
+
+
+_PLANTILLA_API = """<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>API · Concentrador</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:32px 20px 60px; background:#12161a; color:#c8d2da;
+         font:15px/1.6 system-ui,-apple-system,Segoe UI,sans-serif; }
+  .caja { max-width:820px; margin:0 auto; }
+  h1 { margin:0 0 4px; font-size:22px; color:#e8eef3; }
+  .sub { color:#7d8b96; font-size:13px; margin-bottom:26px; }
+  section { margin-bottom:26px; }
+  h2 { font-size:15px; margin:0 0 2px; color:#8fd6bd; }
+  .nota { margin:0 0 10px; font-size:13px; color:#7d8b96; }
+  ul { list-style:none; margin:0; padding:0; }
+  li { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+       padding:7px 10px; border-radius:6px; }
+  li:nth-child(odd) { background:#181d22; }
+  a { text-decoration:none; display:flex; align-items:baseline; gap:10px; }
+  code { color:#e8eef3; font-size:13.5px;
+         font-family:ui-monospace,Consolas,monospace; }
+  a:hover code { color:#8fd6bd; text-decoration:underline; }
+  .metodo { font-size:11px; font-weight:700; letter-spacing:.5px; }
+  .metodo.get { color:#5aa9e6; }
+  .metodo.post { color:#e6a95a; }
+  .metodo.delete { color:#e07a7a; }
+  .desc { color:#6b7883; font-size:12.5px; }
+  footer { margin-top:34px; padding-top:16px; border-top:1px solid #242b32;
+           font-size:12.5px; color:#6b7883; }
+  footer a { display:inline; color:#8fd6bd; }
+  .aviso { background:#1c2a24; border-left:3px solid #4a8c74; padding:10px 14px;
+           border-radius:5px; font-size:13px; margin-bottom:26px; color:#a8c4b8; }
+</style>
+</head>
+<body>
+<div class="caja">
+  <h1>API · Concentrador</h1>
+  <div class="sub">Agrega varios workers (cámaras) y habla con la nube</div>
+
+  <div class="aviso">
+    El <strong>panel web</strong> está en <a href="/">la raíz</a>; esta página
+    lista la <strong>API</strong>. Las rutas del worker se descubren en vivo,
+    así que lo que ves es lo que hay. Las de <code>POST</code> necesitan un
+    cliente HTTP (Postman, curl).
+  </div>
+
+  {{SECCIONES}}
+
+  <footer>
+    Referencia completa en <code>API.md</code> (worker) y
+    <code>API_NUBE.md</code> (nube) ·
+    <a href="/api/salud-camaras">Estado de las cámaras</a>
+  </footer>
+</div>
+</body>
+</html>"""
+
+
 def _inyectar_selector(html: str) -> str:
     """Inserta el selector de workers en la barra superior del panel.
 
@@ -170,6 +315,16 @@ class ProxyPanel:
         @app.route("/")
         def pagina():
             return _inyectar_selector(leer_panel())
+
+        @app.route("/api")
+        def api_documentacion():
+            """Página navegable con las rutas de la API del concentrador.
+
+            Vive en /api (no en /) porque / sirve el panel de la cámara.
+            El proxy genérico de abajo captura cualquier ruta no definida,
+            así que esta DEBE declararse antes para no acabar reenviada.
+            """
+            return pagina_api(self.workers, self.worker_activo)
 
         @app.route("/api/workers-panel")
         def api_workers_panel():
