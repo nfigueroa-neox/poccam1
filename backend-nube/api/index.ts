@@ -79,6 +79,13 @@ async function manejar(peticion: Peticion, url: URL): Promise<Response> {
   const metodo = peticion.method;
 
   try {
+    // ── Página de inicio ────────────────────────────────────────────
+    // Sin esto, abrir la URL en el navegador da el 404 seco de Vercel, que
+    // no explica qué es este servicio ni qué rutas existen.
+    if ((ruta === '' || ruta === '/') && metodo === 'GET') {
+      return paginaInicio(url.origin);
+    }
+
     // ── Endpoints del concentrador (requieren token) ────────────────
     if (ruta.startsWith('/api/concentrador/')) {
       if (!autenticado(peticion)) {
@@ -126,6 +133,134 @@ async function manejar(peticion: Peticion, url: URL): Promise<Response> {
 }
 
 // ── Rutas del concentrador ───────────────────────────────────────────
+
+// ── Página de inicio ─────────────────────────────────────────────────
+
+/**
+ * Portada del servicio: explica qué es y lista las rutas disponibles.
+ *
+ * Existe porque abrir la raíz en un navegador es lo primero que hace
+ * cualquiera que recibe la URL, y el 404 por defecto de Vercel no dice nada.
+ */
+function paginaInicio(origen: string): Response {
+  const grupos: Array<{
+    titulo: string;
+    nota: string;
+    rutas: Array<[string, string, string]>;
+  }> = [
+    {
+      titulo: 'Consultar (sistema externo)',
+      nota: 'Sin token. Para dashboards y tablets.',
+      rutas: [
+        ['GET', '/api/camaras', 'Cámaras con su id y su salud'],
+        ['GET', '/api/camaras?estado=alerta', 'Solo las cámaras con problemas'],
+        ['GET', '/api/analisis?limit=50', 'Análisis de la IA (máx. 500)'],
+        ['GET', '/api/eventos?limit=50', 'Eventos detectados (antes de la IA)'],
+        ['GET', '/api/workers', 'Workers registrados'],
+      ],
+    },
+    {
+      titulo: 'Configurar cámaras (sistema externo)',
+      nota: 'Sin token. Flujo: listar → ver esquema → leer y escribir.',
+      rutas: [
+        ['GET', '/api/camaras/{id}/config/schema', 'Qué campos se pueden modificar'],
+        ['GET', '/api/camaras/{id}/config', 'Config vigente de esa cámara'],
+        ['POST', '/api/camaras/{id}/config', 'Modificar sus parámetros (fusión)'],
+      ],
+    },
+    {
+      titulo: 'Concentrador',
+      nota: 'Requieren Authorization: Bearer <CONCENTRADOR_TOKEN>.',
+      rutas: [
+        ['GET', '/api/concentrador/config?version=N', 'Bajar configuración (304 si no cambió)'],
+        ['POST', '/api/concentrador/analisis', 'Subir un análisis de la IA'],
+        ['POST', '/api/concentrador/estado', 'Heartbeat del concentrador'],
+        ['POST', '/api/concentrador/config', 'Publicar config hecha en local'],
+      ],
+    },
+  ];
+
+  const secciones = grupos
+    .map(
+      (g) => `
+    <section>
+      <h2>${g.titulo}</h2>
+      <p class="nota">${g.nota}</p>
+      <ul>
+        ${g.rutas
+          .map(
+            ([m, r, d]) =>
+              `<li><a href="${r.replace('{id}', 'panel-1')}">` +
+              `<span class="metodo ${m.toLowerCase()}">${m}</span>` +
+              `<code>${r}</code></a><span class="desc">${d}</span></li>`,
+          )
+          .join('')}
+      </ul>
+    </section>`,
+    )
+    .join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>API · POC Cámaras</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; padding:32px 20px 60px; background:#12161a; color:#c8d2da;
+         font:15px/1.6 system-ui,-apple-system,Segoe UI,sans-serif; }
+  .caja { max-width:820px; margin:0 auto; }
+  h1 { margin:0 0 4px; font-size:22px; color:#e8eef3; }
+  .sub { color:#7d8b96; font-size:13px; margin-bottom:26px; }
+  section { margin-bottom:26px; }
+  h2 { font-size:15px; margin:0 0 2px; color:#8fd6bd; }
+  .nota { margin:0 0 10px; font-size:13px; color:#7d8b96; }
+  ul { list-style:none; margin:0; padding:0; }
+  li { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;
+       padding:7px 10px; border-radius:6px; }
+  li:nth-child(odd) { background:#181d22; }
+  a { text-decoration:none; display:flex; align-items:baseline; gap:10px; }
+  code { color:#e8eef3; font-size:13.5px;
+         font-family:ui-monospace,Consolas,monospace; }
+  a:hover code { color:#8fd6bd; text-decoration:underline; }
+  .metodo { font-size:11px; font-weight:700; letter-spacing:.5px; }
+  .metodo.get { color:#5aa9e6; }
+  .metodo.post { color:#e6a95a; }
+  .desc { color:#6b7883; font-size:12.5px; }
+  footer { margin-top:34px; padding-top:16px; border-top:1px solid #242b32;
+           font-size:12.5px; color:#6b7883; }
+  footer a { display:inline; color:#8fd6bd; }
+  .aviso { background:#1c2a24; border-left:3px solid #4a8c74; padding:10px 14px;
+           border-radius:5px; font-size:13px; margin-bottom:26px; color:#a8c4b8; }
+</style>
+</head>
+<body>
+<div class="caja">
+  <h1>API · Sistema de cámaras</h1>
+  <div class="sub">backend-nube · Vercel + Supabase</div>
+
+  <div class="aviso">
+    Esta es una <strong>API</strong>, no un panel: las rutas devuelven JSON.
+    Los enlaces de abajo son navegables; las de <code>POST</code> necesitan un
+    cliente HTTP (Postman, curl). Esta API nunca expone la imagen de cámara.
+  </div>
+
+  ${secciones}
+
+  <footer>
+    Estado del servicio: <a href="/api/salud">/api/salud</a> ·
+    Referencia completa en <code>API_NUBE.md</code>
+  </footer>
+</div>
+</body>
+</html>`;
+
+  return new Response(html, {
+    status: 200,
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+}
 
 async function rutasConcentrador(
   ruta: string,
