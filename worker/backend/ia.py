@@ -49,10 +49,19 @@ def _obtener_clave() -> str | None:
 
 def analizar_imagen(ruta_imagen: str, api_key: str | None = None,
                     model: str = MODELO_DEFECTO,
-                    prompt: str | None = None) -> dict:
+                    prompt: str | None = None,
+                    detail: str = "low") -> dict:
     """Envía la imagen a DeepSeek Vision y devuelve el JSON que la IA
     produzca siguiendo el `prompt` (system). Es un motor genérico: la
     estructura de respuesta la define el prompt, NO el backend.
+
+    `detail` controla el tamaño con que se procesa la imagen:
+
+      • "low"  → se escala a 512×512. Más rápido y económico, pero pierde
+                  detalle fino (números o texto pequeño pueden ser ilegibles).
+      • "high" → mantiene la resolución original. Necesario para leer
+                  displays con dígitos o texto pequeño.
+      • "auto" → equivale a "high" hoy.
 
     Nunca lanza: ante error devuelve un dict {'error': ...}.
     """
@@ -86,7 +95,12 @@ def analizar_imagen(ruta_imagen: str, api_key: str | None = None,
                 {"type": "text", "text": "Analiza la imagen según tus "
                                             "instrucciones y responde el JSON."},
                 {"type": "image_url", "image_url": {
-                    "url": f"data:{mime};base64,{b64}"}},
+                    "url": f"data:{mime};base64,{b64}",
+                    # Escala el procesamiento de la imagen: "low" la reduce a
+                    # 512x512 y "high" mantiene la resolución. Sin este campo
+                    # el proveedor asume su propio valor por defecto.
+                    "detail": detail if detail in ("low", "high", "auto")
+                              else "low"}},
             ]},
         ],
         "temperature": 0.0,

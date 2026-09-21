@@ -211,7 +211,12 @@ externo.
 
 | Campo | Tipo | Valores | Qué hace |
 |---|---|---|---|
-| `detail` | string | `low` \| `high` \| `auto` | Detalle que se envía a la IA. `low` es más económico |
+| `detail` | string | `low` \| `high` \| `auto` | **Cómo procesa la IA la imagen.** `low` la escala a 512×512 (más barato, pero pierde números y texto pequeño); `high` mantiene la resolución original |
+
+> ⚠️ **Este parámetro sí importa.** Si la cámara lee un display con dígitos, `low`
+puede hacerlos ilegibles y la IA devolverá peor precisión. Es el único campo de
+la sección `ia` que se expone, precisamente porque tiene efecto directo en la
+calidad de la lectura.
 
 ### 4.4 ⚠️ Campos excluyentes según `metodo`
 

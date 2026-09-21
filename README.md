@@ -409,7 +409,7 @@ los dashboards externos sepan cómo interpretarlo.
 |---|---|---|
 | `enabled` | `false` | Arranca detenido; se activa desde el panel |
 | `model` | `deepseek-v4-flash-vision-exp` | Modelo de visión |
-| `detail` | `low` | `low` escala la imagen (más rápido y barato); `high` mantiene resolución |
+| `detail` | `low` | **Cómo procesa la IA la imagen.** `low` la escala a 512×512 (más barato, pero pierde números y texto pequeño); `high` mantiene la resolución original, necesario para leer displays con dígitos pequeños; `auto` equivale a `high` |
 | `esquema` | `estado_equipo_v1` | Nombre del formato de `datos` |
 
 **La API key no se guarda en `config.yaml`** (ese archivo se versiona). Se lee
@@ -493,7 +493,7 @@ Todos se pueden editar en vivo desde el panel web (se aplican y se guardan solos
 |---|---|---|
 | `enabled` | `false` | Arranca **detenido**; se activa desde el panel |
 | `model` | `deepseek-v4-flash-vision-exp` | Modelo de visión |
-| `detail` | `low` | `low` escala la imagen (más barato); `high` mantiene resolución |
+| `detail` | `low` | **Cómo procesa la IA la imagen.** `low` la escala a 512×512 (más barato, pero pierde texto pequeño); `high` mantiene la resolución, necesario para leer dígitos pequeños en un display |
 | `esquema` | `estado_equipo_v1` | Nombre del formato de `datos` (lo define el prompt) |
 
 **El prompt NO está aquí**: vive en `worker/ia_prompt.txt` (editable en caliente

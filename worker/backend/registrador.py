@@ -131,6 +131,7 @@ class RegistradorEventos:
                     ruta_original,
                     api_key=self.config.ia_api_key or None,
                     model=self.config.ia_model,
+                    detail=self.config.ia_detail,
                 )
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Fallo el análisis IA {evento_id}: {e}")

@@ -141,6 +141,23 @@ Aplica parámetros en vivo y los persiste. Cuerpo con secciones parciales:
 | `detail` | string | `low` \| `high` \| `auto` | `low` |
 | `prompt` | string | texto del prompt | — |
 
+#### `detail`: precisión vs costo
+
+Controla **cómo procesa la IA la imagen** antes de analizarla:
+
+| Valor | Qué hace | Cuándo usarlo |
+|---|---|---|
+| `low` | Escala a **512×512** | Imágenes grandes donde el objeto es evidente (¿hay una persona?) |
+| `high` | Mantiene la **resolución original** | **Leer texto o números pequeños** (displays, etiquetas) |
+| `auto` | Equivale a `high` hoy | — |
+
+> ⚠️ Con `low`, un display con dígitos pequeños puede volverse ilegible y la IA
+devuelve peor precisión. Si el objetivo es **leer un valor**, usar `high`.
+>
+> Subir a `high` aumenta el costo por análisis (más tokens de imagen). Como la
+> IA solo se invoca **cuando hay un cambio** (ahorro ~99%), el impacto suele ser
+> menor que el de una mala lectura.
+
 > `aplicar_preset_al_iniciar`, `region` y `monitor` se configuran en
 > `config.yaml` (no se exponen por API).
 

@@ -129,6 +129,13 @@
           <label title="Nombre del formato del JSON que devuelve la IA (ej: personas_v1)">Esquema IA
             <input id="p-esquema" type="text" placeholder="generico_v1">
           </label>
+          <label title="Cómo procesa la IA la imagen. low la escala a 512x512 (más barato, pero pierde números y texto pequeño); high mantiene la resolución original.">Detalle IA
+            <select id="p-detail">
+              <option value="low">low (512x512, más barato)</option>
+              <option value="high">high (resolución original)</option>
+              <option value="auto">auto</option>
+            </select>
+          </label>
           <label>Intervalo de sondeo (s)
             <input id="p-intervalo" type="number" step="0.05" min="0.05">
           </label>
@@ -431,6 +438,7 @@ async function cargarParams() {
     const cfg = await res.json();
     document.getElementById('p-worker-id').value = cfg.captura.worker_id || '';
     document.getElementById('p-esquema').value = (cfg.ia && cfg.ia.esquema) || '';
+    document.getElementById('p-detail').value = (cfg.ia && cfg.ia.detail) || 'low';
     document.getElementById('p-intervalo').value = cfg.captura.intervalo_segundos;
     document.getElementById('p-metodo').value = cfg.deteccion.metodo;
     document.getElementById('p-min-area').value = cfg.deteccion.min_area_px;
@@ -511,6 +519,7 @@ const CAMPOS = [
   ['p-max-desp', 'deteccion', 'max_desplazamiento', parseFloat],
   ['p-worker-id', 'captura', 'worker_id', v => v],
   ['p-esquema', 'ia', 'esquema', v => v],
+  ['p-detail', 'ia', 'detail', v => v],
 ];
 for (const [id, seccion, clave, conv] of CAMPOS) {
   document.getElementById(id).addEventListener('change', () => {
@@ -594,6 +603,7 @@ document.getElementById('btn-aplicar').addEventListener('click', async () => {
     },
     ia: {
       esquema: num('p-esquema'),
+      detail: num('p-detail'),
     },
     deteccion: {
       metodo: num('p-metodo'),
