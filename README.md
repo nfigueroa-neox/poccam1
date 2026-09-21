@@ -30,6 +30,7 @@ distintos (¿está en uso?, leer un display, detectar una alarma...) sin tocar
 | **[`DESPLIEGUE.md`](DESPLIEGUE.md)** | Puesta en marcha en la nube, problemas conocidos y verificación |
 | **[`concentrador/README.md`](concentrador/README.md)** | El panel unificado y el proxy hacia los workers |
 | **[`backend-nube/README.md`](backend-nube/README.md)** | La API en Vercel: qué hace, variables y despliegue |
+| **[`REQUERIMIENTO_PANEL_CAMARAS.md`](REQUERIMIENTO_PANEL_CAMARAS.md)** | **Para el equipo del dashboard externo**: qué implementar para administrar las cámaras |
 | **`postman_collection.json`** | Colección de Postman lista para importar (45 requests, worker + nube) |
 
 La API de configuración/estado (solo JSON) es consumible desde otro equipo de

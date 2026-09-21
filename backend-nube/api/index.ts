@@ -438,29 +438,41 @@ const ESQUEMA_CONFIG = {
         metodo: {
           tipo: 'string',
           valores: ['ssim', 'diff', 'mse'],
-          descripcion: 'ssim es robusto a sombras/luz; diff es más rápido',
+          descripcion:
+            'Cómo compara las imágenes. ssim tolera sombras y luz; diff es ' +
+            'más rápido. OJO: determina cuál filtro aplica (ver min_area_px).',
         },
         min_area_px: {
           tipo: 'integer',
+          min: 0,
           descripcion:
-            'Píxeles mínimos cambiados para disparar un evento. Es el ' +
-            'filtro principal: súbelo para ignorar ruido.',
+            'Píxeles mínimos cambiados para disparar un evento. Es el filtro ' +
+            'principal: súbelo para ignorar ruido. NO aplica con metodo=mse.',
         },
         blur_ksize: {
           tipo: 'integer',
+          min: 0,
           descripcion: 'Desenfoque que elimina ruido de compresión (impar)',
         },
-        umbral: { tipo: 'float', descripcion: 'Umbral de referencia' },
+        umbral: {
+          tipo: 'number',
+          min: 0,
+          descripcion:
+            'Umbral de comparación. Solo decide con metodo=mse; con ssim y ' +
+            'diff manda min_area_px, así que no lo expongas en un panel.',
+        },
         marcar_cambios: {
           tipo: 'boolean',
           descripcion: 'Dibujar los contornos del cambio en la imagen',
         },
         frames_estables: {
           tipo: 'integer',
+          min: 1,
           descripcion: 'Capturas consecutivas para confirmar un cambio',
         },
         min_intervalo_eventos: {
-          tipo: 'float',
+          tipo: 'number',
+          min: 0,
           descripcion: 'Segundos mínimos entre eventos (anti-rebote)',
         },
         alinear_imagenes: {
@@ -468,8 +480,11 @@ const ESQUEMA_CONFIG = {
           descripcion: 'Compensar vibración de la cámara',
         },
         max_desplazamiento: {
-          tipo: 'float',
-          descripcion: 'Desplazamiento máximo a corregir (píxeles)',
+          tipo: 'number',
+          min: 1,
+          descripcion:
+            'Desplazamiento máximo a corregir (píxeles). Solo aplica con ' +
+            'alinear_imagenes activo.',
         },
       },
     },
@@ -477,15 +492,16 @@ const ESQUEMA_CONFIG = {
       descripcion: 'Ritmo de captura',
       campos: {
         intervalo_segundos: {
-          tipo: 'float',
+          tipo: 'number',
+          min: 0.01,
           descripcion: 'Segundos entre capturas',
         },
         rotacion: {
           tipo: 'integer',
           valores: [0, 90, 180, 270],
           descripcion:
-            'Grados de giro. OJO: al cambiarlo el ROI dibujado queda ' +
-            'desalineado y hay que redibujarlo desde el front local.',
+            'Grados de giro. NO exponer en un panel externo: al cambiarlo el ' +
+            'ROI queda desalineado y hay que redibujarlo desde el front local.',
         },
       },
     },
@@ -496,14 +512,26 @@ const ESQUEMA_CONFIG = {
           tipo: 'string',
           descripcion: 'Nombre del formato del JSON que produce el prompt',
         },
-        model: { tipo: 'string', descripcion: 'Modelo de visión' },
+        model: {
+          tipo: 'string',
+          descripcion:
+            'Modelo de visión. NO exponer en un panel externo: está elegido ' +
+            'y probado.',
+        },
         detail: {
           tipo: 'string',
           valores: ['low', 'high', 'auto'],
-          descripcion: 'Nivel de detalle que se envía a la IA',
+          descripcion: 'Nivel de detalle que se envía a la IA (low es más barato)',
         },
       },
     },
+  },
+  // Campos que el panel NO debe ofrecer, aunque la API los acepte.
+  no_exponer_en_panel: {
+    'captura.rotacion':
+      'Al cambiarlo el ROI queda desalineado y no se puede redibujar desde afuera',
+    'ia.model': 'Está elegido y probado; cambiarlo añade variabilidad sin beneficio',
+    'deteccion.umbral': 'No decide con metodo=ssim/diff (manda min_area_px)',
   },
   no_modificables: {
     'captura.camara_fuente': 'URL de la cámara: es hardware local',
