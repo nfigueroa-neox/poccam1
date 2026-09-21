@@ -100,37 +100,38 @@ Punto de entrada de la pantalla. Devuelve todas las cámaras con su estado.
 GET /api/camaras/{camara_id}/config/schema
 ```
 
-Devuelve el contrato de campos. **Se recomienda consumirlo al abrir la
-pantalla** en vez de codificar los campos a mano: si la API añade un campo,
-aparece solo.
-
-Devuelve tres bloques de información:
-
-| Sección | Para qué |
-|---|---|
-| `bloques` | Campos modificables: tipo, valores válidos, rango y descripción |
-| `no_modificables` | Enviarlos da `400`. **No ofrecerlos** |
-| `no_exponer_en_panel` | La API los acepta, pero **el panel no debe mostrarlos** (§6) |
+Devuelve **exactamente** los campos que la API acepta. **Consumirlo al abrir
+la pantalla** en vez de codificar los campos a mano: si la API cambia, el panel
+se adapta solo.
 
 ```json
 {
-  "bloques": { "deteccion": { "campos": {
-      "min_area_px": { "tipo": "integer", "min": 0,
-        "descripcion": "Píxeles mínimos cambiados para disparar un evento..." }
-  } } },
-  "no_modificables": {
-    "captura.camara_fuente": "URL de la cámara: es hardware local"
+  "bloques": {
+    "deteccion": {
+      "descripcion": "Cómo se decide si hubo un cambio en la imagen",
+      "campos": {
+        "min_area_px": { "tipo": "integer", "min": 0,
+          "descripcion": "Píxeles mínimos cambiados para disparar un evento..." },
+        "metodo": { "tipo": "string", "valores": ["ssim","diff","mse"],
+          "descripcion": "..." }
+      }
+    },
+    "captura": { "campos": { "intervalo_segundos": { "tipo": "number", "min": 0.01 } } },
+    "ia": { "campos": { "detail": { "tipo": "string", "valores": ["low","high","auto"] } } }
   },
-  "no_exponer_en_panel": {
-    "captura.rotacion": "Al cambiarlo el ROI queda desalineado...",
-    "ia.model": "Está elegido y probado...",
-    "deteccion.umbral": "No decide con metodo=ssim/diff..."
+  "no_aceptados": {
+    "rotacion": "depende del encuadre: cambiarlo desalinea el área de análisis...",
+    "model": "el modelo de visión está elegido y probado...",
+    "umbral": "solo decide con metodo=mse; con ssim y diff manda min_area_px"
   }
 }
 ```
 
-> Usar `no_exponer_en_panel` como fuente de verdad para §6: si el backend
-> cambiara de opinión, el panel se adapta solo.
+Cada campo trae `tipo`, `min` cuando aplica, `valores` cuando es una lista
+cerrada, y una `descripcion` para el usuario.
+
+> **`no_aceptados` es informativo**, por si el cliente necesita explicar por
+> qué un parámetro no está. El panel **no debe** listarlos como campos.
 
 ### 3.3 Leer la configuración enviada
 
@@ -185,63 +186,50 @@ Respuesta correcta:
 
 ## 4. Campos modificables
 
+La API acepta **9 campos**. Son los únicos que tienen efecto desde un cliente
+externo.
+
 ### 4.1 Detección — ajuste de sensibilidad
 
 | Campo | Tipo | Rango / valores | Qué hace |
 |---|---|---|---|
 | **`min_area_px`** | entero | `>= 0` | **El principal.** Píxeles mínimos cambiados para disparar un evento. Súbelo para ignorar ruido |
-| `metodo` | string | `ssim` \| `diff` \| `mse` | Cómo compara las imágenes. `ssim` tolera sombras; `diff` es más rápido |
+| `metodo` | string | `ssim` \| `diff` \| `mse` | Cómo compara. `ssim` tolera sombras; `diff` es más rápido |
 | `blur_ksize` | entero | `>= 0` | Desenfoque que elimina ruido de compresión |
 | `frames_estables` | entero | `>= 1` | Capturas consecutivas para confirmar un cambio |
 | `min_intervalo_eventos` | número | `>= 0` (seg) | Anti-rebote: tiempo mínimo entre eventos |
 | `alinear_imagenes` | booleano | — | Compensar vibración de la cámara |
 | `max_desplazamiento` | número | `>= 1` (px) | Solo aplica si `alinear_imagenes` es `true` |
-| `marcar_cambios` | booleano | — | Dibujar los contornos del cambio en la imagen |
-| `umbral` | número | `>= 0` | ⚠️ Ver §4.4 |
 
 ### 4.2 Captura
 
 | Campo | Tipo | Rango | Qué hace |
 |---|---|---|---|
 | `intervalo_segundos` | número | `> 0.01` | Segundos entre capturas (0.5 = 2 capturas/s) |
-| `rotacion` | entero | `0`/`90`/`180`/`270` | ⚠️ **No exponer en el panel.** Ver §6 |
 
 ### 4.3 IA de visión
 
 | Campo | Tipo | Valores | Qué hace |
 |---|---|---|---|
-| `esquema` | string | texto libre | Nombre del formato del JSON que produce el prompt |
 | `detail` | string | `low` \| `high` \| `auto` | Detalle que se envía a la IA. `low` es más económico |
-| `model` | string | texto libre | ⚠️ **No exponer en el panel.** Ver §6 |
 
 ### 4.4 ⚠️ Campos excluyentes según `metodo`
 
-Este es el punto que más errores causa. **Qué parámetros aplican depende del
-método elegido:**
+Este es el punto que más errores causa. **Qué parámetro decide depende del
+método:**
 
-| `metodo` | Filtro que decide | Campo que NO aplica |
-|---|---|---|
-| `ssim` | `min_area_px` | `umbral` |
-| `diff` | `min_area_px` | `umbral` |
-| `mse` | **`umbral`** | **`min_area_px`** |
-
-**Requisito:** cuando el usuario cambie `metodo`, el panel debe **deshabilitar
-visualmente** el campo que no aplica (atenuarlo, con una nota). Si no, tocará un
-parámetro que no hace nada y creerá que la detección está mal.
-
-El proyecto usa `ssim`, así que en la práctica `min_area_px` manda y `umbral` no
-se usa. **Recomendación: no mostrar `umbral` en absoluto.**
-
-### 4.5 Campos NO modificables
-
-| Campo | Por qué |
+| `metodo` | Filtro que decide |
 |---|---|
-| `captura.camara_fuente`, `captura.fuente` | Es hardware local del equipo de la planta |
-| `roi` | Se dibuja sobre el video en el panel local |
-| `prompt` | Protegido con contraseña en el equipo |
-| `nombre_camara`, `worker_id` | Identidad del equipo |
+| `ssim` | `min_area_px` |
+| `diff` | `min_area_px` |
+| `mse` | `umbral` — **no disponible en la API** |
 
-Enviarlos devuelve `400` (ver §5). **No ofrecerlos en el panel.**
+En la práctica: el proyecto usa `ssim`, así que **`min_area_px` es el único
+filtro de sensibilidad**. Si algún día se cambiara a `mse`, habría que añadir
+`umbral` a la API (hoy no se acepta, precisamente porque no aplica).
+
+> El panel **no necesita** manejar esto: `umbral` no está en la API, así que no
+> se puede mostrar por error.
 
 ---
 
@@ -277,22 +265,27 @@ problemas (se validan todos juntos, no uno por uno):
 
 ## 6. Restricciones de diseño
 
-La API publica estas restricciones en **`no_exponer_en_panel`** (§3.2), así que
-el panel debería leerlas en vez de codificarlas. Las razones:
+**La API ya aplica estas restricciones** rechazando los campos (§4). El panel no
+tiene que recordarlas: si construye el formulario desde el `schema`, no puede
+ofrecer algo que la API rechace.
 
-**1. `rotacion` no se expone.** Cambiar el giro deja el área de análisis (RoI)
-apuntando a otro sitio de la escena, y quien lo cambie desde aquí no puede
-redibujarla. La detección empieza a mirar basura y nadie lo nota.
+Las razones, por si hacen falta para explicarle a un usuario:
 
-**2. `model` no se expone.** El modelo de visión está elegido y probado. Que se
-pueda cambiar por accidente solo añade variabilidad sin beneficio.
+| Campo | Por qué no está |
+|---|---|
+| `rotacion` | Cambiar el giro deja el área de análisis (RoI) apuntando a otro sitio de la escena, y no se puede redibujar desde aquí |
+| `model` | El modelo de visión está elegido y probado |
+| `umbral` | No decide con el método en uso |
+| `esquema` | Define el formato del JSON de salida; lo fija quien administra la cámara |
+| `marcar_cambios` | Solo dibuja contornos en la imagen, para depurar; no afecta la detección |
+| `camara_fuente` | Es hardware local y **no viaja a la nube**: el panel no la verá nunca |
 
-**3. `umbral` no se expone.** No aplica con el método en uso (§4.4).
+### Otras reglas
 
-**4. Siempre mostrar `efectiva`, nunca `config`.** `config` puede estar
+**1. Siempre mostrar `efectiva`, nunca `config`.** `config` puede estar
 incompleto; mostrar eso daría valores falsos.
 
-**5. La app externa no recibe notificaciones.** Todas las rutas son `GET`. Para
+**2. La app externa no recibe notificaciones.** Todas las rutas son `GET`. Para
 "tiempo real" hay dos caminos:
 
 | Camino | Cómo | Cuándo |
@@ -371,8 +364,8 @@ incompleto; mostrar eso daría valores falsos.
 - [ ] Permite editar los campos de §4.1, §4.2 y §4.3 (excepto los excluidos en §6).
 - [ ] Al enviar, usa **fusión**: solo los campos modificados.
 - [ ] Maneja el `400` mostrando los mensajes del servidor.
-- [ ] Deshabilita `umbral` cuando el método es `ssim` o `diff`.
-- [ ] **No** ofrece los campos de `no_exponer_en_panel` (`rotacion`, `model`, `umbral`).
+- [ ] Construye el formulario desde `GET .../config/schema`, sin codificar campos.
+- [ ] Muestra únicamente los campos que devuelve `bloques` (9 en total).
 - [ ] Advierte cuando `salud != "ok"`: no habrá detecciones.
 - [ ] Funciona con la lista vacía y con cámaras caídas, sin romperse.
 

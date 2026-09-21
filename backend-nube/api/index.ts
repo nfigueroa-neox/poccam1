@@ -115,7 +115,7 @@ async function manejar(peticion: Peticion, url: URL): Promise<Response> {
     if (camara) {
       const camaraId = decodeURIComponent(camara[1]);
       const esSchema = Boolean(camara[2]);
-      if (esSchema && metodo === 'GET') return json(200, ESQUEMA_CONFIG);
+      if (esSchema && metodo === 'GET') return json(200, construirEsquema());
       if (metodo === 'GET') return await leerConfigCamara(camaraId);
       if (metodo === 'POST') return await escribirConfigCamara(camaraId, peticion);
       return json(405, { error: 'método no permitido' });
@@ -417,128 +417,44 @@ async function upsertConfig(
 // ── Consultas de lectura ─────────────────────────────────────────────
 
 /**
- * Campos que el sistema externo puede modificar por cámara.
+ * Esquema que se publica en `GET /api/camaras/{id}/config/schema`.
  *
- * Refleja lo que el worker acepta en `/api/externo/config`. La URL de la
- * cámara y el ROI NO están aquí a propósito: son hardware y encuadre
- * locales, y el worker los IGNORA si llegan desde fuera.
- *
- * Se expone en `GET /api/camaras/{id}/config/schema` para que un cliente
- * externo sepa qué puede enviar sin leer el código.
+ * Se construye a partir de `REGLAS` y `NO_ACEPTADOS`, que son las mismas
+ * fuentes que usa la validación. Así el esquema no puede decir una cosa y la
+ * validación otra: si un campo está en el esquema, se acepta; si no, se
+ * rechaza con el motivo.
  */
-const ESQUEMA_CONFIG = {
-  descripcion:
-    'Bloques de configuración que se pueden enviar a una cámara. Enviar ' +
-    'solo las claves a cambiar; el resto se mantiene. El concentrador ' +
-    'baja los cambios y los aplica al worker en caliente.',
-  bloques: {
-    deteccion: {
-      descripcion: 'Cómo se decide si hubo un cambio en la imagen',
-      campos: {
-        metodo: {
-          tipo: 'string',
-          valores: ['ssim', 'diff', 'mse'],
-          descripcion:
-            'Cómo compara las imágenes. ssim tolera sombras y luz; diff es ' +
-            'más rápido. OJO: determina cuál filtro aplica (ver min_area_px).',
-        },
-        min_area_px: {
-          tipo: 'integer',
-          min: 0,
-          descripcion:
-            'Píxeles mínimos cambiados para disparar un evento. Es el filtro ' +
-            'principal: súbelo para ignorar ruido. NO aplica con metodo=mse.',
-        },
-        blur_ksize: {
-          tipo: 'integer',
-          min: 0,
-          descripcion: 'Desenfoque que elimina ruido de compresión (impar)',
-        },
-        umbral: {
-          tipo: 'number',
-          min: 0,
-          descripcion:
-            'Umbral de comparación. Solo decide con metodo=mse; con ssim y ' +
-            'diff manda min_area_px, así que no lo expongas en un panel.',
-        },
-        marcar_cambios: {
-          tipo: 'boolean',
-          descripcion: 'Dibujar los contornos del cambio en la imagen',
-        },
-        frames_estables: {
-          tipo: 'integer',
-          min: 1,
-          descripcion: 'Capturas consecutivas para confirmar un cambio',
-        },
-        min_intervalo_eventos: {
-          tipo: 'number',
-          min: 0,
-          descripcion: 'Segundos mínimos entre eventos (anti-rebote)',
-        },
-        alinear_imagenes: {
-          tipo: 'boolean',
-          descripcion: 'Compensar vibración de la cámara',
-        },
-        max_desplazamiento: {
-          tipo: 'number',
-          min: 1,
-          descripcion:
-            'Desplazamiento máximo a corregir (píxeles). Solo aplica con ' +
-            'alinear_imagenes activo.',
-        },
-      },
-    },
-    captura: {
-      descripcion: 'Ritmo de captura',
-      campos: {
-        intervalo_segundos: {
-          tipo: 'number',
-          min: 0.01,
-          descripcion: 'Segundos entre capturas',
-        },
-        rotacion: {
-          tipo: 'integer',
-          valores: [0, 90, 180, 270],
-          descripcion:
-            'Grados de giro. NO exponer en un panel externo: al cambiarlo el ' +
-            'ROI queda desalineado y hay que redibujarlo desde el front local.',
-        },
-      },
-    },
-    ia: {
-      descripcion: 'Análisis con IA de visión',
-      campos: {
-        esquema: {
-          tipo: 'string',
-          descripcion: 'Nombre del formato del JSON que produce el prompt',
-        },
-        model: {
-          tipo: 'string',
-          descripcion:
-            'Modelo de visión. NO exponer en un panel externo: está elegido ' +
-            'y probado.',
-        },
-        detail: {
-          tipo: 'string',
-          valores: ['low', 'high', 'auto'],
-          descripcion: 'Nivel de detalle que se envía a la IA (low es más barato)',
-        },
-      },
-    },
-  },
-  // Campos que el panel NO debe ofrecer, aunque la API los acepte.
-  no_exponer_en_panel: {
-    'captura.rotacion':
-      'Al cambiarlo el ROI queda desalineado y no se puede redibujar desde afuera',
-    'ia.model': 'Está elegido y probado; cambiarlo añade variabilidad sin beneficio',
-    'deteccion.umbral': 'No decide con metodo=ssim/diff (manda min_area_px)',
-  },
-  no_modificables: {
-    'captura.camara_fuente': 'URL de la cámara: es hardware local',
-    'captura.fuente': 'Tipo de fuente: local',
-    roi: 'Se dibuja sobre el video en el front local',
-    prompt: 'Protegido con contrasena en el worker',
-  },
+function construirEsquema() {
+  const bloques: Record<string, any> = {};
+  for (const [bloque, campos] of Object.entries(REGLAS)) {
+    const salida: Record<string, any> = {};
+    for (const [campo, regla] of Object.entries(campos)) {
+      salida[campo] = {
+        tipo: regla.tipo,
+        ...(regla.valores ? { valores: regla.valores } : {}),
+        ...(regla.min !== undefined ? { min: regla.min } : {}),
+        descripcion: regla.descripcion,
+      };
+    }
+    bloques[bloque] = {
+      descripcion: DESCRIPCION_BLOQUE[bloque] ?? '',
+      campos: salida,
+    };
+  }
+  return {
+    descripcion:
+      'Campos que se pueden enviar a una cámara. Enviar solo los que cambian; ' +
+      'el resto se mantiene. El concentrador baja los cambios y los aplica al ' +
+      'worker en caliente.',
+    bloques,
+    no_aceptados: NO_ACEPTADOS,
+  };
+}
+
+const DESCRIPCION_BLOQUE: Record<string, string> = {
+  deteccion: 'Cómo se decide si hubo un cambio en la imagen',
+  captura: 'Ritmo de captura',
+  ia: 'Análisis con IA de visión',
 };
 
 /**
@@ -614,14 +530,9 @@ async function escribirConfigCamara(
   // solo aparecería en el log del concentrador, en silencio para el cliente.
   const errores = validarConfig(nuevos);
   if (errores.length) {
-    // Separar los campos prohibidos para dar un mensaje más útil
-    const prohibidos = errores.filter((e) => e.includes('no se puede cambiar'));
     return json(400, {
       error: 'configuración inválida',
       errores,
-      ...(prohibidos.length
-        ? { no_modificables: ESQUEMA_CONFIG.no_modificables }
-        : {}),
       sugerencia: 'Consulta GET /api/camaras/{id}/config/schema',
     });
   }
@@ -672,47 +583,125 @@ async function escribirConfigCamara(
 /**
  * Reglas de validación por campo.
  *
- * Los rangos coinciden con los que aplica el worker en
- * `_aplicar_config` (`worker/backend/web.py`). Si se cambian allí, hay que
- * cambiarlos aquí: si no, la API aceptaría algo que el worker rechaza, y el
- * cliente creería que guardó bien.
+ * La API acepta SOLO lo que tiene sentido cambiar desde un cliente externo.
+ * Un campo que se acepta pero no se debe usar obliga a inventar listas de
+ * "no expongas esto" en cada cliente, así que no se acepta: se rechaza.
  *
- * `tipo` solo describe el tipo para construir el mensaje de error.
+ * Criterio para que un campo esté aquí:
+ *   1. Su cambio no depende del encuadre (si no, desalinea el ROI).
+ *   2. No altera el modelo de IA ni el formato de salida acordado.
+ *   3. Realmente afecta el comportamiento que el cliente quiere ajustar.
+ *
+ * Fuera por (1): rotacion. Por (2): model. Por (3): umbral (solo decide con
+ * metodo=mse, que no se usa) y marcar_cambios (es solo para depurar la imagen).
+ *
+ * Los rangos coinciden con los que aplica el worker en `_aplicar_config`
+ * (`worker/backend/web.py`). Si se cambian allí, hay que cambiarlos aquí: si
+ * no, la API aceptaría algo que el worker rechaza.
  */
 const REGLAS: Record<
   string,
   Record<
     string,
-    { tipo: string; valores?: unknown[]; min?: number; entero?: boolean }
+    {
+      tipo: string;
+      valores?: unknown[];
+      min?: number;
+      descripcion: string;
+      entero?: boolean;
+    }
   >
 > = {
   deteccion: {
-    metodo: { tipo: 'string', valores: ['ssim', 'diff', 'mse'] },
-    umbral: { tipo: 'number', min: 0 },
-    min_area_px: { tipo: 'integer', min: 0, entero: true },
-    blur_ksize: { tipo: 'integer', min: 0, entero: true },
-    marcar_cambios: { tipo: 'boolean' },
-    frames_estables: { tipo: 'integer', min: 1, entero: true },
-    min_intervalo_eventos: { tipo: 'number', min: 0 },
-    alinear_imagenes: { tipo: 'boolean' },
-    max_desplazamiento: { tipo: 'number', min: 1 },
+    metodo: {
+      tipo: 'string',
+      valores: ['ssim', 'diff', 'mse'],
+      descripcion:
+        'Cómo compara las imágenes. ssim tolera sombras y luz; diff es más ' +
+        'rápido. Determina cuál filtro decide (ver min_area_px).',
+    },
+    min_area_px: {
+      tipo: 'integer',
+      min: 0,
+      descripcion:
+        'Píxeles mínimos cambiados para disparar un evento. Es el filtro ' +
+        'principal: súbelo para ignorar ruido. No aplica con metodo=mse.',
+    },
+    blur_ksize: {
+      tipo: 'integer',
+      min: 0,
+      descripcion: 'Desenfoque que elimina ruido de compresión',
+    },
+    frames_estables: {
+      tipo: 'integer',
+      min: 1,
+      descripcion: 'Capturas consecutivas para confirmar un cambio',
+    },
+    min_intervalo_eventos: {
+      tipo: 'number',
+      min: 0,
+      descripcion: 'Segundos mínimos entre eventos (anti-rebote)',
+    },
+    alinear_imagenes: {
+      tipo: 'boolean',
+      descripcion: 'Compensar vibración de la cámara',
+    },
+    max_desplazamiento: {
+      tipo: 'number',
+      min: 1,
+      descripcion:
+        'Desplazamiento máximo a corregir (píxeles). Solo aplica con ' +
+        'alinear_imagenes activo.',
+    },
   },
   captura: {
-    intervalo_segundos: { tipo: 'number', min: 0.01 },
-    rotacion: { tipo: 'integer', valores: [0, 90, 180, 270], entero: true },
+    intervalo_segundos: {
+      tipo: 'number',
+      min: 0.01,
+      descripcion: 'Segundos entre capturas',
+    },
   },
   ia: {
-    esquema: { tipo: 'string' },
-    model: { tipo: 'string' },
-    detail: { tipo: 'string', valores: ['low', 'high', 'auto'] },
+    detail: {
+      tipo: 'string',
+      valores: ['low', 'high', 'auto'],
+      descripcion: 'Nivel de detalle que se envía a la IA (low es más barato)',
+    },
   },
 };
 
-/** Campos que existen en el esquema pero NO se pueden cambiar desde afuera. */
-const PROHIBIDOS = new Set([
-  'camara_fuente', 'fuente', 'region', 'roi', 'prompt', 'nombre_camara',
-  'worker_id', 'reconectar_segundos', 'monitor', 'aplicar_preset_al_iniciar',
-]);
+/**
+ * Campos que existen en el worker pero NO se pueden cambiar desde afuera.
+ *
+ * Se rechazan con un mensaje que explica el motivo, en vez de aceptarlos y
+ * esperar que el cliente no los use: un campo aceptado que no se debe usar
+ * es una trampa.
+ */
+const NO_ACEPTADOS: Record<string, string> = {
+  rotacion:
+    'depende del encuadre: cambiarlo desalinea el área de análisis (ROI), ' +
+    'que solo se puede redibujar desde el panel local',
+  model:
+    'el modelo de visión está elegido y probado; cambiarlo añadiría ' +
+    'variabilidad sin beneficio',
+  umbral:
+    'solo decide con metodo=mse; con ssim y diff manda min_area_px',
+  marcar_cambios:
+    'es para depurar la imagen marcando los cambios; no afecta la detección',
+  esquema:
+    'define el formato del JSON que produce el prompt de la IA; lo fija el ' +
+    'equipo que administra la cámara',
+  camara_fuente: 'la URL de la cámara es hardware local y no sale del equipo',
+  fuente: 'el tipo de fuente es local del equipo',
+  nombre_camara: 'la identidad del equipo se define localmente',
+  worker_id: 'la identidad del equipo se define localmente',
+  reconectar_segundos: 'parámetro de reconexión interna del equipo',
+  monitor: 'solo aplica a la captura de pantalla local',
+  aplicar_preset_al_iniciar: 'se decide al arrancar el equipo',
+  roi: 'se dibuja sobre el video en el panel local',
+  prompt: 'está protegido con contraseña en el equipo',
+  region: 'es local del equipo',
+};
 
 /**
  * Valida un payload de configuración contra REGLAS.
@@ -743,11 +732,9 @@ function validarConfig(datos: Record<string, any>): string[] {
       const regla = reglas[campo];
 
       if (!regla) {
-        if (PROHIBIDOS.has(campo)) {
-          errores.push(
-            `${ruta}: no se puede cambiar desde afuera ` +
-              '(es hardware o encuadre local)',
-          );
+        const motivo = NO_ACEPTADOS[campo];
+        if (motivo) {
+          errores.push(`${ruta}: no se acepta desde afuera porque ${motivo}`);
         } else {
           errores.push(
             `${ruta}: campo desconocido (válidos: ${Object.keys(reglas).join(', ')})`,
