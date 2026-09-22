@@ -141,22 +141,27 @@ Aplica parámetros en vivo y los persiste. Cuerpo con secciones parciales:
 | `detail` | string | `low` \| `high` \| `auto` | `low` |
 | `prompt` | string | texto del prompt | — |
 
-#### `detail`: precisión vs costo
+#### `detail`: ¿qué imagen recibe la IA?
 
-Controla **cómo procesa la IA la imagen** antes de analizarla:
+La imagen que se envía es el **recorte del área de análisis (ROI)**, no el frame
+completo de la cámara. `detail` controla cómo la procesa el proveedor:
 
-| Valor | Qué hace | Cuándo usarlo |
+| Valor | Resolución procesada | Cuándo usarlo |
 |---|---|---|
-| `low` | Escala a **512×512** | Imágenes grandes donde el objeto es evidente (¿hay una persona?) |
-| `high` | Mantiene la **resolución original** | **Leer texto o números pequeños** (displays, etiquetas) |
-| `auto` | Equivale a `high` hoy | — |
+| **`auto`** (default) | **Tamaño real del ROI** | Lo habitual |
+| `high` | Tamaño real del ROI | Igual que `auto`, forzando el modo |
+| `low` | **512×512** | Imágenes grandes donde solo importa "¿hay algo?" |
 
-> ⚠️ Con `low`, un display con dígitos pequeños puede volverse ilegible y la IA
-devuelve peor precisión. Si el objetivo es **leer un valor**, usar `high`.
+> ⚠️ **`low` deforma los recortes.** Redimensiona a un cuadrado de 512×512 sin
+> respetar la proporción: un ROI de `500×120` se estira ~4× en vertical, y los
+> dígitos de un display quedan ilegibles. Como el ROI ya es una imagen pequeña,
+> además no aporta ahorro apreciable.
 >
-> Subir a `high` aumenta el costo por análisis (más tokens de imagen). Como la
-> IA solo se invoca **cuando hay un cambio** (ahorro ~99%), el impacto suele ser
-> menor que el de una mala lectura.
+> Con `auto`/`high` **no hay pérdida**: se envía el recorte a su tamaño real.
+
+La resolución exacta con la que se analizó cada evento queda registrada en
+`meta.entrada_ia` del análisis, y el panel la muestra bajo el campo **Detalle IA**
+según el área definida y el modo elegido.
 
 > `aplicar_preset_al_iniciar`, `region` y `monitor` se configuran en
 > `config.yaml` (no se exponen por API).

@@ -177,6 +177,7 @@ class RegistradorEventos:
 
         def trabajo():
             from backend.ia import analizar_imagen
+            entrada = None
             try:
                 resultado = analizar_imagen(
                     ruta_original,
@@ -184,6 +185,11 @@ class RegistradorEventos:
                     model=self.config.ia_model,
                     detail=self.config.ia_detail,
                 )
+                # `_entrada` es metadato NUESTRO (con qué resolución se envió),
+                # no un campo que haya producido la IA: se saca antes de
+                # guardar para no contaminar el JSON que define el prompt.
+                if isinstance(resultado, dict):
+                    entrada = resultado.pop("_entrada", None)
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Fallo el análisis IA {evento_id}: {e}")
                 return
@@ -217,6 +223,9 @@ class RegistradorEventos:
                     "score": float(evento.get("score", 0.0)),
                     "imagen_original": ruta_original,
                     "capturas_total": evento.get("capturas_total", 0),
+                    # Con qué resolución se envió la imagen a la IA: el ROI
+                    # a tamaño real, o remuestreado si detail es "low".
+                    **({"entrada_ia": entrada} if entrada else {}),
                 },
             }
             nombre = f"analisis_{evento_id}.json"

@@ -47,6 +47,38 @@ def _obtener_clave() -> str | None:
     return None
 
 
+def resolucion_enviada(ruta_imagen: str, detail: str = "auto") -> dict:
+    """Qué resolución recibe el proveedor de visión.
+
+    Devuelve el tamaño real del archivo y el que se procesará según `detail`:
+
+      • "auto" / "high" → se procesa a tamaño real (el ROI tal cual)
+      • "low"           → el proveedor la redimensiona a un cuadrado de
+                         512x512, así que un recorte apaisado se distorsiona
+
+    El ROI ya se recorta antes de llegar aquí, así que "tamaño real" es el
+    del recorte, no el del frame completo de la cámara.
+    """
+    info = {"detail": detail}
+    try:
+        import cv2
+        img = cv2.imread(str(ruta_imagen))
+        if img is None:
+            return info
+        alto, ancho = img.shape[:2]
+    except Exception:  # noqa: BLE001 — es solo informativo
+        return info
+
+    info["archivo"] = [ancho, alto]
+    if detail == "low":
+        info["procesada"] = [512, 512]
+        info["distorsionada"] = (round(512 / ancho, 2) != round(512 / alto, 2))
+    else:
+        info["procesada"] = [ancho, alto]
+        info["distorsionada"] = False
+    return info
+
+
 def analizar_imagen(ruta_imagen: str, api_key: str | None = None,
                     model: str = MODELO_DEFECTO,
                     prompt: str | None = None,
@@ -74,6 +106,9 @@ def analizar_imagen(ruta_imagen: str, api_key: str | None = None,
             b64 = base64.b64encode(f.read()).decode("utf-8")
     except OSError as e:
         return {"error": f"No se pudo leer la imagen: {e}"}
+
+    # Resolución del archivo que se envía y la que el proveedor procesará.
+    envio = resolucion_enviada(ruta_imagen, detail)
 
     mime = "image/png"
     if ruta_imagen.lower().endswith((".jpg", ".jpeg")):
@@ -125,7 +160,12 @@ def analizar_imagen(ruta_imagen: str, api_key: str | None = None,
             datos = _json.loads(resp.read().decode("utf-8"))
         contenido = (datos.get("choices", [{}])[0]
                      .get("message", {}).get("content", ""))
-        return _parsear_respuesta(contenido)
+        resultado = _parsear_respuesta(contenido)
+        # Dejar constancia de con qué resolución se analizó: sin esto no hay
+        # forma de saber si la IA leyó el ROI a tamaño real o remuestreado.
+        if isinstance(resultado, dict) and "error" not in resultado:
+            resultado.setdefault("_entrada", envio)
+        return resultado
     except Exception as e:  # noqa: BLE001
         logger.warning(f"Error llamando a DeepSeek Vision: {e}")
         return {"error": f"Error de API: {e}"}

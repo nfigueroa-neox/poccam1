@@ -61,7 +61,11 @@ class Config:
     ia_enabled: bool = False     # enviar cada evento a DeepSeek Vision
     ia_model: str = "deepseek-v4-flash-vision-exp"
     ia_api_key: str = ""        # opcional; si vacío usa env DEEPSEEK_API_KEY o ia.key
-    ia_detail: str = "low"      # low (512px, más barato) | high | auto
+    # Cómo procesa el proveedor la imagen que se le envía:
+    #   "auto"/"high" → la recibe tal cual (el ROI a su tamaño real)
+    #   "low"         → la redimensiona a 512x512, lo que deforma un recorte
+    #                    apaisado (p. ej. 500x120) y estira los dígitos
+    ia_detail: str = "auto"
     ia_esquema: str = "generico_v1"  # nombre del formato de `datos` que
         # devuelve el prompt (viaja en el contrato hacia la nube)
 

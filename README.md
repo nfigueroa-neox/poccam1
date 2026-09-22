@@ -411,7 +411,7 @@ los dashboards externos sepan cómo interpretarlo.
 |---|---|---|
 | `enabled` | `false` | Arranca detenido; se activa desde el panel |
 | `model` | `deepseek-v4-flash-vision-exp` | Modelo de visión |
-| `detail` | `low` | **Cómo procesa la IA la imagen.** `low` la escala a 512×512 (más barato, pero pierde números y texto pequeño); `high` mantiene la resolución original, necesario para leer displays con dígitos pequeños; `auto` equivale a `high` |
+| `detail` | `auto` | **Cómo procesa el proveedor la imagen que se le envía.** `auto`/`high`: la recibe **a tamaño real** (el área de análisis tal cual, que es lo que conviene al leer un display). `low`: la redimensiona a **512×512**, lo que **deforma** cualquier recorte que no sea cuadrado (un ROI de 500×120 se estira 4× en vertical) |
 | `esquema` | `estado_equipo_v1` | Nombre del formato de `datos` |
 
 **La API key no se guarda en `config.yaml`** (ese archivo se versiona). Se lee
@@ -495,7 +495,7 @@ Todos se pueden editar en vivo desde el panel web (se aplican y se guardan solos
 |---|---|---|
 | `enabled` | `false` | Arranca **detenido**; se activa desde el panel |
 | `model` | `deepseek-v4-flash-vision-exp` | Modelo de visión |
-| `detail` | `low` | **Cómo procesa la IA la imagen.** `low` la escala a 512×512 (más barato, pero pierde texto pequeño); `high` mantiene la resolución, necesario para leer dígitos pequeños en un display |
+| `detail` | `auto` | **Cómo procesa el proveedor la imagen que se le envía.** `auto`/`high`: tamaño real del área de análisis. `low`: la redimensiona a **512×512**, deformando cualquier recorte no cuadrado |
 | `esquema` | `estado_equipo_v1` | Nombre del formato de `datos` (lo define el prompt) |
 
 **El prompt NO está aquí**: vive en `worker/ia_prompt.txt` (editable en caliente

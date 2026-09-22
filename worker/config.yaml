@@ -9,13 +9,13 @@ captura:
   monitor: 1
   intervalo_segundos: 0.5
   aplicar_preset_al_iniciar: true
-  rotacion: 180
+  rotacion: 90
   reconectar_segundos: 180.0
 deteccion:
   metodo: ssim
   umbral: 0.5
-  min_area_px: 350
-  blur_ksize: 9
+  min_area_px: 50
+  blur_ksize: 5
   marcar_cambios: false
   frames_estables: 2
   min_intervalo_eventos: 1.0
@@ -34,5 +34,5 @@ registro:
 ia:
   enabled: false
   model: deepseek-v4-flash-vision-exp
-  detail: low
+  detail: auto
   esquema: estado_equipo_v1

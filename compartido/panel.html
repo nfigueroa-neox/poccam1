@@ -218,13 +218,16 @@
             <label title="Nombre del formato del JSON que devuelve la IA (ej: personas_v1)">Esquema IA
               <input id="p-esquema" type="text" placeholder="generico_v1">
             </label>
-            <label title="Cómo procesa la IA la imagen. low la escala a 512x512 (más barato, pero pierde números y texto pequeño); high mantiene la resolución original.">Detalle IA
+            <label title="Cómo procesa el proveedor la imagen que se le envía. auto/high la recibe tal cual (el área de análisis a su tamaño real); low la redimensiona a 512x512, lo que deforma un recorte apaisado y estira los dígitos.">Detalle IA
               <select id="p-detail">
-                <option value="low">low (512x512, más barato)</option>
-                <option value="high">high (resolución original)</option>
-                <option value="auto">auto</option>
+                <option value="auto">auto (tamaño real)</option>
+                <option value="high">high (tamaño real)</option>
+                <option value="low">low (512x512, deforma recortes)</option>
               </select>
             </label>
+            <div id="ia-entrada" style="grid-column: 1 / -1; font-size:12.5px;
+                 color:#8fd6bd; background:#16222b; border-left:3px solid #37474f;
+                 border-radius:4px; padding:7px 10px; margin-top:2px;"></div>
           </div>
         </fieldset>
 
@@ -472,6 +475,7 @@ document.getElementById('guardar').addEventListener('click', async () => {
     estado('✅ Área guardada: ' + region.join(', ') + ' px');
     // El área nueva ya corresponde a la cámara actual: quitar el aviso.
     mostrarAvisoRoi(null);
+    actualizarEntradaIA();   // la resolución enviada a la IA cambió
   } else {
     estado('❌ Error al guardar: ' + d.error);
   }
@@ -540,13 +544,51 @@ fuenteEstado.onmessage = (ev) => {
 fuenteEstado.onerror = () => { /* EventSource reconecta solo */ };
 
 // ── Parámetros en vivo ────────────────────────────────────────────────
+// Muestra con qué resolución se está enviando la imagen a la IA, según el
+// ROI guardado y el modo elegido. Sin esto no hay forma de saber si el
+// proveedor está leyendo el recorte a tamaño real o remuestreado.
+async function actualizarEntradaIA() {
+  const el = document.getElementById('ia-entrada');
+  if (!el) return;
+  const modo = document.getElementById('p-detail').value;
+
+  let roi = null;
+  try {
+    const r = await fetch('/api/roi');
+    const d = await r.json();
+    roi = d.region;
+  } catch (e) { return; }
+
+  if (!roi) {
+    el.textContent = '📐 Define el área de análisis para ver la resolución ' +
+                     'que se enviará a la IA.';
+    return;
+  }
+
+  const [w, h] = [roi[2], roi[3]];
+  if (modo === 'low') {
+    const deforma = Math.abs(512 / w - 512 / h) > 0.01;
+    el.innerHTML = `📐 El área es <b>${w}×${h}</b> px, pero con <b>low</b> se ` +
+      `envía a <b>512×512</b>` +
+      (deforma
+        ? ' <span style="color:#ffb74d">— la proporción cambia: el contenido ' +
+          'sale deformado</span>'
+        : ' (la proporción se mantiene)') + '.';
+    el.style.color = deforma ? '#ffcc80' : '#8fd6bd';
+  } else {
+    el.innerHTML = `📐 El área es <b>${w}×${h}</b> px y se envía a ese mismo ` +
+      `tamaño (<b>${w}×${h}</b>).`;
+    el.style.color = '#8fd6bd';
+  }
+}
+
 async function cargarParams() {
   try {
     const res = await fetch('/api/config');
     const cfg = await res.json();
     document.getElementById('p-worker-id').value = cfg.captura.worker_id || '';
     document.getElementById('p-esquema').value = (cfg.ia && cfg.ia.esquema) || '';
-    document.getElementById('p-detail').value = (cfg.ia && cfg.ia.detail) || 'low';
+    document.getElementById('p-detail').value = (cfg.ia && cfg.ia.detail) || 'auto';
     document.getElementById('p-intervalo').value = cfg.captura.intervalo_segundos;
     document.getElementById('p-metodo').value = cfg.deteccion.metodo;
     document.getElementById('p-min-area').value = cfg.deteccion.min_area_px;
@@ -558,6 +600,7 @@ async function cargarParams() {
     document.getElementById('p-marcar').checked = cfg.deteccion.marcar_cambios;
     document.getElementById('p-alinear').checked = cfg.deteccion.alinear_imagenes;
     actualizarHabilitados();
+    actualizarEntradaIA();
     marcarEstadoParams('', '');
   } catch (e) {
     // Antes esto se silenciaba y los campos quedaban vacíos sin explicación.
@@ -665,6 +708,8 @@ for (const [id, seccion, clave, conv] of CAMPOS) {
     aplicar({[seccion]: {[clave]: v}});
   });
 }
+
+document.getElementById('p-detail').addEventListener('change', actualizarEntradaIA);
 
 // Al cambiar el método, re-evaluar qué campos quedan editables
 document.getElementById('p-metodo').addEventListener('change', actualizarHabilitados);
