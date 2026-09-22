@@ -53,6 +53,7 @@
                  evita saltos de layout al cargar */
                  object-fit: contain; display: block; background: #000; }
   .captura .fecha { padding: 8px 10px; font-size: 13px; color: #ccc; }
+  .captura .dimensiones { padding: 0 10px 8px; font-size: 12.5px; color: #90a4ae; }
   /* Títulos del par antes/después: colores distintos para no confundirlos */
   .captura .par-titulo { padding: 6px 10px; font-size: 12px; font-weight: bold;
                          letter-spacing: .5px; }
@@ -755,6 +756,11 @@ async function actualizarUltimas() {
       <div class="par-titulo ${clase}">${etiqueta}</div>
       <img src="${img.url}?t=${Date.now()}" alt="${etiqueta}">
       <div class="fecha">🕐 ${img.fecha || 'sin fecha'}</div>
+      ${img.resolucion ? `
+      <div class="dimensiones">
+        📐 ${img.resolucion[0]}×${img.resolucion[1]} px
+        · ${img.pixeles.toLocaleString('es')} px²
+      </div>` : ''}
     </div>` : '';
 
   cont.innerHTML =

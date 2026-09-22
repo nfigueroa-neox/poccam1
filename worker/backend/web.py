@@ -520,6 +520,31 @@ def _leer_ultimo_evento() -> dict | None:
         return None
 
 
+def _datos_imagen(ruta: Path, fecha: str) -> dict:
+    """Metadatos de una imagen del par antes/después: fecha y dimensiones.
+
+    Las dimensiones corresponden al área analizada (recorte del ROI), no al
+    frame completo, así que sirven para saber sobre cuántos píxeles se hizo
+    la comparación. `pixeles` es el total del recorte.
+
+    Se leen del archivo en vez de guardarse en el evento: así el dato siempre
+    coincide con la imagen que se muestra, incluso para eventos antiguos que
+    se registraron antes de existir este campo.
+    """
+    import cv2
+    info = {"archivo": ruta.name, "url": f"/capturas/{ruta.name}",
+            "fecha": fecha}
+    try:
+        img = cv2.imread(str(ruta))
+        if img is not None:
+            alto, ancho = img.shape[:2]
+            info["resolucion"] = [ancho, alto]
+            info["pixeles"] = int(ancho * alto)
+    except Exception as e:  # noqa: BLE001 — la imagen se sirve igual
+        logger.debug(f"No se pudieron leer las dimensiones de {ruta.name}: {e}")
+    return info
+
+
 def par_antes_despues() -> dict:
     """Par ANTES/DESPUÉS del último evento detectado.
 
@@ -549,11 +574,7 @@ def par_antes_despues() -> dict:
             # Sin fecha propia: no inventar una (el mtime sería la de la
             # última escritura, que no es cuándo se capturó la imagen).
             fecha_ref = ""
-        antes = {
-            "archivo": ruta_ref.name,
-            "url": f"/capturas/{ruta_ref.name}",
-            "fecha": fecha_ref,
-        }
+        antes = _datos_imagen(ruta_ref, fecha_ref)
 
     # DESPUÉS: el evento más reciente del historial
     if carpeta.exists():
@@ -562,12 +583,8 @@ def par_antes_despues() -> dict:
         if eventos:
             archivo = eventos[0]
             fecha = _parsear_fecha(archivo.name)
-            despues = {
-                "archivo": archivo.name,
-                "url": f"/capturas/{archivo.name}",
-                "fecha": (fecha.strftime("%d/%m/%Y %H:%M:%S")
-                          if fecha else ""),
-            }
+            despues = _datos_imagen(
+                archivo, fecha.strftime("%d/%m/%Y %H:%M:%S") if fecha else "")
 
     return {"antes": antes, "despues": despues,
             "hay_evento": despues is not None}

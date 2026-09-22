@@ -362,7 +362,7 @@ de configuración no incluye el prompt (ver `CONTRATO_NUBE.md`).
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/ultimas` | El par **antes/después** del último evento: `{"antes": {archivo,url,fecha}, "despues": {...}, "hay_evento": bool}`. `antes` es la referencia contra la que se comparó (con su fecha de captura) y puede ser `null` si aún no hubo eventos |
+| `GET` | `/api/ultimas` | El par **antes/después** del último evento: `{"antes": {archivo,url,fecha,resolucion,pixeles}, "despues": {...}, "hay_evento": bool}`. `antes` es la referencia contra la que se comparó (con su fecha de captura) y puede ser `null` si aún no hubo eventos. `resolucion` es `[ancho, alto]` del **área analizada** (el recorte del ROI, no el frame completo) y `pixeles` su total |
 | `GET` | `/api/log` | Últimos eventos + `min_area_px` en vivo + sugerencia de ajuste |
 | `DELETE` | `/api/log` | Vacía `eventos.jsonl` |
 | `GET` | `/api/analisis` | Últimos 10 análisis IA (JSON completo que devolvió el modelo) |
