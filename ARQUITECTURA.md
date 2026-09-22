@@ -115,6 +115,11 @@ Por eso los cambios se aplican **sin reiniciar**.
 ```
 canvas (mouse) → POST /api/roi → roi.json → el detector recarga el archivo
   en cada procesar() (cargar_roi) → se aplica al siguiente frame
+
+roi.json guarda también con qué cámara y resolución se dibujó: el ROI son
+píxeles absolutos, así que ese contexto es lo que permite avisar cuando el
+área queda desalineada tras cambiar de cámara ('GET /api/roi' lo expone en
+`desactualizado`).
 ```
 
 ### Ruta de la UI (sin polling)
@@ -126,7 +131,7 @@ GET /api/ultimas     → par antes/después del último evento, con dimensiones 
 GET /api/log         → eventos + sugerencias de ajuste (bajo demanda)
 GET /api/eventos     → SSE: avisa cuando hay captura nueva (actualiza la UI)
 GET /api/estado      → SSE: desplazamiento estimado + margen + interior/borde
-GET/POST/DELETE /api/roi
+GET/POST/DELETE /api/roi → el GET incluye aviso si el área quedó desalineada
 GET/POST /api/config
 DELETE /api/log      → limpia eventos.jsonl
 GET /capturas/<nombre> → sirve una imagen (protegido contra rutas fuera de la carpeta)
@@ -138,7 +143,7 @@ GET /capturas/<nombre> → sirve una imagen (protegido contra rutas fuera de la 
 
 | Endpoint | Método | Entrada | Salida |
 |---|---|---|---|
-| `/api/roi` | GET | — | `{"region": [x,y,w,h] \| null}` |
+| `/api/roi` | GET | — | `{"region": [x,y,w,h] \| null, "desactualizado": {motivo,...} \| null}` |
 | `/api/roi` | POST | `{"region":[x,y,w,h]}` | `{"ok":true}` |
 | `/api/roi` | DELETE | — | `{"ok":true}` |
 | `/api/ultimas` | GET | — | `{"antes":{archivo,url,fecha,resolucion,pixeles}\|null, "despues":{...}\|null, "hay_evento":bool}` |

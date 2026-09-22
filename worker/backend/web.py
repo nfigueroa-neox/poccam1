@@ -82,7 +82,7 @@ _GRUPOS_API = [
             {"metodo": "POST", "ruta": "/api/rotacion",
              "descripcion": "Rotar la imagen (0/90/180/270)"},
             {"metodo": "GET", "ruta": "/api/roi",
-             "descripcion": "Área de análisis"},
+             "descripcion": "Área de análisis + aviso si quedó desalineada"},
             {"metodo": "POST", "ruta": "/api/roi",
              "descripcion": "Definir el área de análisis"},
             {"metodo": "DELETE", "ruta": "/api/roi",
