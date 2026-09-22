@@ -429,9 +429,34 @@ detecte cámaras caídas.
   "fuente": "rtsp://127.0.0.1:8554/stream.rtsp",
   "capturas": 3223,
   "cambios": 35,
-  "con_deteccion": false
+  "con_deteccion": false,
+  "efectiva": { ... }
 }
 ```
+
+#### `efectiva`: lo que realmente corre
+
+Incluye la configuración **en ejecución**, no la que se envió. La diferencia
+importa: un cliente puede haber configurado solo `min_area_px`, y el resto sigue
+en los valores locales del equipo. Sin este bloque habría que adivinarlos.
+
+```json
+"efectiva": {
+  "deteccion": {
+    "metodo": "ssim", "min_area_px": 50, "blur_ksize": 5, "umbral": 0.5,
+    "frames_estables": 2, "min_intervalo_eventos": 1.0,
+    "marcar_cambios": false, "alinear_imagenes": false,
+    "max_desplazamiento": 10.0
+  },
+  "captura": { "intervalo_segundos": 0.5, "rotacion": 0, "reconectar_segundos": 180.0 },
+  "ia": { "enabled": false, "esquema": "estado_equipo_v1",
+          "model": "deepseek-v4-flash-vision-exp", "detail": "auto" }
+}
+```
+
+> Es la **fuente de verdad** para mostrar valores en un panel. `GET /api/config`
+devuelve lo mismo pero con más bloques (`web`, `registro`, `presets`); este
+trae solo lo que se puede ajustar desde fuera.
 
 **`GET /api/salud-camaras`** (concentrador): agrega a todos los workers en una
 sola llamada. Si un worker no responde, se reporta como `worker_caido`
