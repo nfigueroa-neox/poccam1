@@ -130,6 +130,9 @@
                 title="Rotar 90° en sentido horario">↻ 90°</button>
       </div>
       <div id="estado"></div>
+      <div id="aviso-roi" style="display:none; background:#3e2723; color:#ffcc80;
+           border-left:3px solid #ffb74d; border-radius:5px; padding:9px 12px;
+           margin:8px 0; font-size:13px; line-height:1.45;"></div>
       <div id="vibracion"></div>
 
       <div id="params">
@@ -324,7 +327,33 @@ fetch('/api/roi').then(r => r.json()).then(d => {
   } else {
     estado('Sin área definida — se analiza toda la imagen.');
   }
-});
+  mostrarAvisoRoi(d.desactualizado);
+}).catch(() => { /* el panel funciona igual sin esto */ });
+
+// Aviso cuando el ROI guardado ya no corresponde a la cámara/resolución
+// actuales. NO se borra: puede seguir sirviendo si la cámara nueva apunta
+// al mismo sitio, así que se avisa y el usuario decide.
+function mostrarAvisoRoi(info) {
+  const el = document.getElementById('aviso-roi');
+  if (!el) return;
+  if (!info) { el.style.display = 'none'; el.innerHTML = ''; return; }
+
+  let extra = '';
+  if (info.motivo === 'camara_distinta') {
+    extra = `<br><small>Se dibujó con <code>${info.camara_guardada}</code> ` +
+            `y ahora la cámara es <code>${info.camara_actual}</code>.</small>`;
+  } else if (info.motivo === 'resolucion_distinta') {
+    extra = `<br><small>Resolución al dibujarlo: ` +
+            `${info.resolucion_guardada.join('×')} · ahora: ` +
+            `${info.resolucion_actual.join('×')}.</small>`;
+  }
+  el.innerHTML =
+    `⚠️ <b>El área de análisis puede estar desalineada.</b> ` +
+    `${info.detalle}.${extra}` +
+    `<br><small>Comprueba que el recuadro sigue sobre el display. ` +
+    `Si no, dibújalo de nuevo y pulsa 💾 Guardar área.</small>`;
+  el.style.display = 'block';
+}
 
 function redimensionar() {
   lienzo.width = imagen.clientWidth;
@@ -441,6 +470,8 @@ document.getElementById('guardar').addEventListener('click', async () => {
   const d = await res.json();
   if (d.ok) {
     estado('✅ Área guardada: ' + region.join(', ') + ' px');
+    // El área nueva ya corresponde a la cámara actual: quitar el aviso.
+    mostrarAvisoRoi(null);
   } else {
     estado('❌ Error al guardar: ' + d.error);
   }
@@ -450,6 +481,7 @@ document.getElementById('limpiar').addEventListener('click', async () => {
   await fetch('/api/roi', {method: 'DELETE'});
   roi = null;
   dibujar();
+  mostrarAvisoRoi(null);
   estado('🗑️ Área eliminada — se analiza toda la imagen.');
 });
 
@@ -1152,6 +1184,11 @@ fuenteConfig.onmessage = () => {
   if (editando) return;
   // cargarPresets() ya fija la rotación junto con la resolución
   cargarParams(); cargarPresets();
+  // Al cambiar la cámara, el ROI guardado puede quedar desalineado:
+  // reconsultarlo para mostrar (o quitar) el aviso.
+  fetch('/api/roi').then(r => r.json()).then(d => {
+    mostrarAvisoRoi(d.desactualizado);
+  }).catch(() => {});
 };
 fuenteConfig.onerror = () => { /* reconecta solo */ };
 

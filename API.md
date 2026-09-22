@@ -284,9 +284,40 @@ rotada**). Sin ROI se analiza el frame completo.
 
 | Método | Ruta | Cuerpo | Respuesta |
 |---|---|---|---|
-| `GET` | `/api/roi` | — | `{"region": [x,y,w,h]}` o `{"region": null}` |
+| `GET` | `/api/roi` | — | `{"region": [x,y,w,h], "desactualizado": {...}\|null}` |
 | `POST` | `/api/roi` | `{"region": [x,y,w,h]}` | `{"ok": true}` |
 | `DELETE` | `/api/roi` | — | `{"ok": true}` |
+
+#### `desactualizado`: el área que quedó desalineada
+
+El ROI son **píxeles absolutos**, así que solo valen para la cámara y la
+resolución con las que se dibujaron. Al guardarlo se registra ese contexto, y
+esta ruta avisa cuando dejan de corresponder:
+
+```json
+{
+  "region": [800, 400, 500, 100],
+  "desactualizado": {
+    "motivo": "camara_distinta",
+    "detalle": "El área de análisis se dibujó con otra cámara y sus coordenadas corresponden a esa imagen",
+    "camara_guardada": "http://192.168.1.114:8080/video",
+    "camara_actual": "rtsp://192.168.1.50:554/stream"
+  }
+}
+```
+
+| `motivo` | Cuándo | Campos extra |
+|---|---|---|
+| `camara_distinta` | Cambió la URL de la cámara | `camara_guardada`, `camara_actual` |
+| `resolucion_distinta` | El stream cambió de resolución | `resolucion_guardada`, `resolucion_actual` |
+| `null` | Todo coincide, o no hay ROI | — |
+
+> **No se borra automáticamente.** El área vieja puede seguir sirviendo si la
+> cámara nueva apunta al mismo sitio, así que se avisa y el usuario decide.
+> Redibujar el área (o quitarla) limpia el aviso.
+>
+> Un ROI guardado **antes** de existir este campo no tiene contexto: no se
+> puede comparar, y por lo tanto no genera aviso.
 
 ```bash
 curl -X POST http://127.0.0.1:5000/api/roi \

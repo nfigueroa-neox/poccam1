@@ -185,7 +185,18 @@ class MonitorBackend:
             self._detectar_resolucion_y_preset()
         except Exception as e:  # noqa: BLE001
             logger.warning(f"No se pudo re-detectar la resolución: {e}")
+        # Avisar al panel: si no, seguiría mapeando el ROI con la resolución
+        # anterior y el área dibujada no coincidiría con la analizada.
+        self._avisar_config_cambiada()
         return True
+
+    def _avisar_config_cambiada(self):
+        """Notifica al panel que la config cambió (por SSE) para que refresque."""
+        try:
+            from backend.web import notificar_config_cambiada
+            notificar_config_cambiada()
+        except Exception as e:  # noqa: BLE001 — no debe tumbar el cambio
+            logger.warning(f"No se pudo avisar del cambio de config: {e}")
 
     def _detectar_resolucion_y_preset(self):
         """Lee un frame del stream, detecta su resolución y aplica el

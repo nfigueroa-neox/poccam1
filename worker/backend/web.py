@@ -446,27 +446,85 @@ def _aplicar_config(datos: dict, config, detector, monitor=None,
 
 def cargar_roi():
     """Devuelve [left, top, width, height] o None si no hay área definida."""
+    datos = cargar_roi_completo()
+    if datos:
+        return [datos["left"], datos["top"],
+                datos["width"], datos["height"]]
+    return None
+
+
+def cargar_roi_completo():
+    """El ROI con su contexto: coordenadas + con qué cámara se dibujó.
+
+    El ROI son píxeles absolutos, así que solo son válidos para la cámara y
+    la resolución con las que se dibujaron. Guardar ese contexto permite
+    avisar cuando dejan de corresponder, en vez de analizar una zona
+    equivocada en silencio.
+    """
     if RUTA_ROI.exists():
         try:
             datos = json.loads(RUTA_ROI.read_text(encoding="utf-8"))
             if all(k in datos for k in ("left", "top", "width", "height")):
-                return [datos["left"], datos["top"],
-                        datos["width"], datos["height"]]
+                return datos
         except (json.JSONDecodeError, OSError):
             pass
     return None
 
 
-def guardar_roi(region):
-    RUTA_ROI.write_text(
-        json.dumps({
-            "left": region[0],
-            "top": region[1],
-            "width": region[2],
-            "height": region[3],
-        }),
-        encoding="utf-8",
-    )
+def roi_desactualizado(config) -> dict | None:
+    """Evalúa si el ROI guardado sigue siendo válido para la cámara actual.
+
+    Devuelve None si todo coincide, o un dict explicando la diferencia. Se
+    usa para AVISAR (no para borrar): el ROI viejo puede seguir sirviendo si
+    la cámara nueva apunta al mismo sitio.
+    """
+    datos = cargar_roi_completo()
+    if not datos or config is None:
+        return None
+
+    fuente_guardada = datos.get("camara_fuente")
+    fuente_actual = getattr(config, "camara_fuente", None)
+    if fuente_guardada and fuente_actual and fuente_guardada != fuente_actual:
+        return {
+            "motivo": "camara_distinta",
+            "detalle": ("El área de análisis se dibujó con otra cámara "
+                        "y sus coordenadas corresponden a esa imagen"),
+            "camara_guardada": fuente_guardada,
+            "camara_actual": fuente_actual,
+        }
+
+    res_guardada = datos.get("camara_resolucion")
+    res_actual = getattr(config, "camara_resolucion", None)
+    if (res_guardada and res_actual
+            and list(res_guardada) != list(res_actual)):
+        return {
+            "motivo": "resolucion_distinta",
+            "detalle": ("La resolución cambió: las coordenadas del área "
+                        "apuntan ahora a otra zona de la imagen"),
+            "resolucion_guardada": list(res_guardada),
+            "resolucion_actual": list(res_actual),
+        }
+    return None
+
+
+def guardar_roi(region, config=None):
+    """Guarda el ROI junto con la cámara y resolución actuales.
+
+    Ese contexto es lo que después permite detectar que el área quedó
+    desalineada tras cambiar de cámara o de resolución.
+    """
+    datos = {
+        "left": region[0],
+        "top": region[1],
+        "width": region[2],
+        "height": region[3],
+    }
+    if config is not None:
+        datos["camara_fuente"] = getattr(config, "camara_fuente", None)
+        resolucion = getattr(config, "camara_resolucion", None)
+        if resolucion:
+            datos["camara_resolucion"] = list(resolucion)
+    RUTA_ROI.write_text(json.dumps(datos), encoding="utf-8")
 
 
 def _parsear_fecha(nombre_archivo: str):
@@ -783,7 +841,18 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
 
     @app.route("/api/roi", methods=["GET"])
     def obtener_roi():
-        return jsonify({"region": cargar_roi()})
+        """El área de análisis y, si quedó desalineada, por qué.
+
+        `desactualizado` avisa cuando el ROI se dibujó con otra cámara o
+        resolución: sus coordenadas son píxeles absolutos, así que dejan de
+        corresponder. NO se borra automáticamente porque puede seguir
+        sirviendo si la cámara nueva apunta al mismo sitio; el panel decide
+        qué mostrar con este dato.
+        """
+        return jsonify({
+            "region": cargar_roi(),
+            "desactualizado": roi_desactualizado(config),
+        })
 
     @app.route("/api/roi", methods=["POST"])
     def definir_roi():
@@ -794,7 +863,7 @@ def crear_app(capturador, config=None, detector=None, monitor=None):
         left, top, w, h = (int(v) for v in region)
         if w <= 0 or h <= 0:
             return jsonify({"ok": False, "error": "Dimensiones inválidas"})
-        guardar_roi([left, top, w, h])
+        guardar_roi([left, top, w, h], config=config)
         return jsonify({"ok": True})
 
     @app.route("/api/roi", methods=["DELETE"])
