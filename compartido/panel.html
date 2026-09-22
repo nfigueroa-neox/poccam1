@@ -351,9 +351,32 @@ setInterval(() => {
 // Se usa para el mapeo ROI↔pantalla en lugar de naturalWidth/Height,
 // que en streams MJPEG/RTSP pueden estar desincronizados y desplazan o
 // encogen el rectángulo.
+//
+// IMPORTANTE: son las dimensiones del video TAL COMO SE VE (ya rotado),
+// porque el worker rota la imagen antes de analizarla y guarda el ROI en
+// coordenadas de esa imagen rotada. Con 90°/270° el ancho y el alto se
+// intercambian; si no, el rectángulo dibujado sale desplazado y deformado.
 let _vW = 640, _vH = 480;
+let _resolucionBase = null;   // resolución cruda de la cámara
+let _rotacionVideo = 0;       // grados aplicados (0/90/180/270)
+
+function _aplicarResolucion() {
+  if (!_resolucionBase) return;
+  const [w, h] = _resolucionBase;
+  if (_rotacionVideo === 90 || _rotacionVideo === 270) {
+    _vW = h; _vH = w;   // el video se ve girado: se intercambian
+  } else {
+    _vW = w; _vH = h;
+  }
+}
+
 function setResolucionVideo(w, h) {
-  if (w > 0 && h > 0) { _vW = w; _vH = h; }
+  if (w > 0 && h > 0) { _resolucionBase = [w, h]; _aplicarResolucion(); }
+}
+
+function setRotacionVideo(grados) {
+  _rotacionVideo = ((Number(grados) || 0) % 360 + 360) % 360;
+  _aplicarResolucion();
 }
 
 // Coordenadas de pantalla (css, sobre lienzo) → píxeles reales del video.
@@ -431,25 +454,25 @@ document.getElementById('limpiar').addEventListener('click', async () => {
 });
 
 // ── Rotación de imagen (0/90/180/270) ──────────────────────────────
+// `rotAct` lo fija cargarPresets() con la misma respuesta de /api/config que
+// usa para la resolución: si se pidiera en dos llamadas async separadas,
+// podrían resolverse en cualquier orden y el mapeo del ROI (que depende de
+// ambas) quedaría mal calculado.
 let rotAct = 0;
-// Lee la rotación actual desde la config al cargar
-async function leerRotacion() {
-  try {
-    const r = await fetch('/api/config');
-    const d = await r.json();
-    if (d.captura && typeof d.captura.rotacion === 'number') {
-      rotAct = d.captura.rotacion;
-      estado('🔄 Rotación ' + rotAct + '°');
-    }
-  } catch (e) {}
-}
 async function aplicarRotacion(nueva) {
   const ok = await fetch('/api/rotacion', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({rotacion: nueva}),
   });
-  if (ok.ok) { rotAct = nueva; estado('🔄 Rotación ' + nueva + '°'); }
+  if (ok.ok) {
+    rotAct = nueva;
+    // El ROI guardado queda en coordenadas del video SIN girar respecto al
+    // nuevo, así que hay que actualizar el mapeo y redibujar.
+    setRotacionVideo(nueva);
+    dibujar();
+    estado('🔄 Rotación ' + nueva + '°');
+  }
 }
 document.getElementById('rot-ccw').addEventListener('click', () => {
   aplicarRotacion((rotAct + 270) % 360);  // antihorario = -90
@@ -616,10 +639,22 @@ document.getElementById('p-metodo').addEventListener('change', actualizarHabilit
 
 // Presets por resolución de cámara: reemplazan al botón de valores
 // por defecto con configuraciones calibradas según los megapíxeles.
+//
+// También fija la rotación: hace falta ANTES de cualquier mapeo de ROI,
+// porque con 90°/270° el ancho y el alto del video visto se intercambian.
+// Se usa la misma respuesta para las dos cosas para que no haya carreras.
 async function cargarPresets() {
   try {
     const res = await fetch('/api/config');
     const cfg = await res.json();
+
+    // Rotación primero: condiciona las dimensiones que usa el ROI.
+    if (cfg.captura && typeof cfg.captura.rotacion === 'number') {
+      rotAct = cfg.captura.rotacion;
+      setRotacionVideo(rotAct);
+      if (rotAct) estado('🔄 Rotación ' + rotAct + '°');
+    }
+
     const sel = document.getElementById('p-preset');
     sel.innerHTML = '<option value="">— elegir resolución —</option>' +
       (cfg.presets || []).map(p =>
@@ -629,6 +664,7 @@ async function cargarPresets() {
     // Resolución detectada del stream: seleccionar el preset aplicado
     if (cfg.camara_resolucion) {
       const [w, h] = cfg.camara_resolucion;
+      // setResolucionVideo recalcula _vW/_vH ya con la rotación aplicada
       setResolucionVideo(w, h);
       const p = (cfg.presets || []).find(x => x.id === cfg.preset_aplicado);
       const estadoEl = document.getElementById('params-estado');
@@ -1084,11 +1120,10 @@ async function refrescarListaPrompts() {
 actualizarUltimas();
 actualizarLog();
 cargarParams();
-cargarPresets();
+cargarPresets();   // fija resolución + rotación (necesarias para el mapeo del ROI)
 actualizarEstadoIA();
 actualizarAnalisis();
 promptUI();   // arranca BLOQUEADO siempre
-leerRotacion();
 
 // Actualizar SOLO cuando el servidor avisa que hay una captura nueva
 // (sin polling periódico)
@@ -1115,7 +1150,8 @@ fuenteConfig.onmessage = () => {
                               activo.tagName === 'TEXTAREA' ||
                               activo.tagName === 'SELECT');
   if (editando) return;
-  cargarParams(); leerRotacion(); cargarPresets();
+  // cargarPresets() ya fija la rotación junto con la resolución
+  cargarParams(); cargarPresets();
 };
 fuenteConfig.onerror = () => { /* reconecta solo */ };
 
