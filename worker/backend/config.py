@@ -1,9 +1,13 @@
 """Configuración del backend de monitoreo de cámaras."""
 
+import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 # Raíz del proyecto (ruta absoluta), para que las rutas de salida
 # funcionen sin importar desde dónde se ejecute el proceso.
@@ -200,7 +204,19 @@ class Config:
 
         El archivo se regenera por completo: se pierden los comentarios
         escritos a mano, pero el formato de secciones se conserva.
+
+        Salvaguarda: si la variable de entorno CAPTURA_SOLO_LECTURA está
+        activa, no se escribe nada y se avisa. Las pruebas que cargan el
+        config.yaml real deben activarla para no sobrescribirlo.
         """
+        import os
+        import os
+        if os.environ.get("CAPTURA_SOLO_LECTURA"):
+            logger.warning(
+                "🔒 CAPTURA_SOLO_LECTURA activo: no se guarda %s",
+                path or self._ruta_yaml)
+            return
+
         destino = path or self._ruta_yaml
         with open(destino, "w", encoding="utf-8") as f:
             f.write("# Configuración del Backend de Monitoreo de Paneles\n")
